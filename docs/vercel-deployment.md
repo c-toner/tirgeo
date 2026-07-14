@@ -47,6 +47,7 @@ JWT_AUDIENCE=tirgeo-app
 Notes:
 
 - `JWT_SECRET` must be changed from any local placeholder.
+- Prisma expects `DATABASE_URL`. If a Vercel/Neon integration created `POSTGRES_PRISMA_URL`, `POSTGRES_URL_NON_POOLING`, or `POSTGRES_URL`, either copy that value into `DATABASE_URL` or rely on the app's runtime fallback. Migrations still work best when `DATABASE_URL` is explicitly set.
 - `CORS_ORIGINS` should include every deployed frontend origin that will call the API.
 - Vercel's filesystem is ephemeral. `/tmp` is acceptable for temporary processing, but not durable file storage.
 
@@ -57,6 +58,21 @@ Run migrations against the production database before using the API:
 ```bash
 DATABASE_URL="postgresql://..." npx prisma migrate deploy
 ```
+
+If your `DATABASE_URL` is already stored in Vercel, the cleanest local command is:
+
+```bash
+npx vercel link
+npx vercel env run -e production -- npm run db:migrate:deploy
+```
+
+For a preview database/environment, use:
+
+```bash
+npx vercel env run -e preview -- npm run db:migrate:deploy
+```
+
+These commands fetch the selected Vercel environment variables for the one command without requiring you to paste the database URL into your shell.
 
 This can be run locally, from CI, or from a controlled release job.
 
