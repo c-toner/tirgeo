@@ -9,10 +9,10 @@ COPY tests ./tests
 RUN npm run db:generate && npm run build
 
 FROM node:22-alpine AS runtime
-ENV NODE_ENV=production
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci && npm cache clean --force
+ENV NODE_ENV=production
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=build /app/dist ./dist
