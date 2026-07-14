@@ -1,0 +1,1003 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  PROJECT_MANAGER
+  SUPERVISOR
+  FOREMAN
+  SAFETY_MANAGER
+  PAYROLL
+  WORKER
+  SUBCONTRACTOR
+  CLIENT_AUDITOR
+}
+
+enum Status {
+  DRAFT
+  SUBMITTED
+  APPROVED
+  REJECTED
+  ACTIVE
+  INACTIVE
+  CLOSED
+  CANCELLED
+}
+
+enum ProjectStatus {
+  TENDER
+  AWARDED
+  MOBILISING
+  ACTIVE
+  ON_HOLD
+  PRACTICAL_COMPLETION
+  DEFECTS_LIABILITY
+  CLOSED
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  EXTREME
+}
+
+enum InspectionResult {
+  PASS
+  DEFECT
+  OUT_OF_SERVICE
+}
+
+enum AccountingProvider {
+  XERO
+  MYOB
+}
+
+enum IntegrationStatus {
+  DISCONNECTED
+  CONFIGURED
+  CONNECTED
+  NEEDS_ATTENTION
+}
+
+enum PayrollExportStatus {
+  QUEUED
+  READY
+  SENDING
+  SENT
+  RECONCILED
+  FAILED
+}
+
+enum TimesheetSignatureType {
+  EMPLOYEE
+  APPROVER
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum HseqDomain {
+  HEALTH
+  SAFETY
+  ENVIRONMENT
+  QUALITY
+}
+
+enum HazardStatus {
+  IDENTIFIED
+  ASSESSED
+  CONTROLLED
+  CLOSED
+}
+
+enum ControlType {
+  ELIMINATION
+  SUBSTITUTION
+  ISOLATION
+  ENGINEERING
+  ADMINISTRATIVE
+  PPE
+}
+
+enum HseqInspectionType {
+  SITE_WALK
+  PRE_START
+  ENVIRONMENTAL
+  QUALITY_AUDIT
+  HSEQ_AUDIT
+  PLANT
+}
+
+enum SafetyObservationType {
+  HAZARD
+  NEAR_MISS
+  UNSAFE_ACT
+  POSITIVE_BEHAVIOUR
+  ENVIRONMENTAL
+  QUALITY
+}
+
+enum PermitType {
+  HOT_WORK
+  CONFINED_SPACE
+  EXCAVATION
+  WORKING_AT_HEIGHT
+  LIFTING
+  ELECTRICAL_ISOLATION
+  TRAFFIC_CONTROL
+  ENVIRONMENTAL
+  OTHER
+}
+
+enum PermitStatus {
+  DRAFT
+  REQUESTED
+  APPROVED
+  ACTIVE
+  SUSPENDED
+  CLOSED
+  CANCELLED
+}
+
+model Organisation {
+  id                    String                 @id @default(uuid())
+  name                  String
+  abn                   String?                @unique
+  timezone              String                 @default("Australia/Sydney")
+  createdAt             DateTime               @default(now())
+  users                 User[]
+  projects              Project[]
+  workers               Worker[]
+  plant                 Plant[]
+  tenders               Tender[]
+  auditEvents           AuditEvent[]
+  devices               Device[]
+  mutationReceipts      MutationReceipt[]
+  accountingConnections AccountingConnection[]
+  payrollExports        PayrollExport[]
+  preStartTemplates     PreStartTemplate[]
+  hazards               HazardRegisterItem[]
+  controlMeasures       ControlMeasure[]
+  hseqInspections       HseqInspection[]
+  safetyObservations    SafetyObservation[]
+  permitsToWork         PermitToWork[]
+}
+
+model AccountingConnection {
+  id               String                   @id @default(uuid())
+  organisationId   String
+  provider         AccountingProvider
+  externalTenantId String
+  displayName      String?
+  status           IntegrationStatus        @default(DISCONNECTED)
+  connectedAt      DateTime?
+  lastSyncAt       DateTime?
+  settings         Json?
+  organisation     Organisation             @relation(fields: [organisationId], references: [id])
+  employeeMappings PayrollEmployeeMapping[]
+  payItemMappings  PayrollPayItemMapping[]
+  exports          PayrollExport[]
+
+  @@unique([organisationId, provider])
+}
+
+model PayrollEmployeeMapping {
+  id                 String               @id @default(uuid())
+  connectionId       String
+  workerId           String
+  externalEmployeeId String
+  connection         AccountingConnection @relation(fields: [connectionId], references: [id])
+  worker             Worker               @relation(fields: [workerId], references: [id])
+
+  @@unique([connectionId, workerId])
+  @@unique([connectionId, externalEmployeeId])
+}
+
+model PayrollPayItemMapping {
+  id                String               @id @default(uuid())
+  connectionId      String
+  localCode         String
+  externalPayItemId String
+  connection        AccountingConnection @relation(fields: [connectionId], references: [id])
+
+  @@unique([connectionId, localCode])
+}
+
+model PayrollExport {
+  id                String               @id @default(uuid())
+  organisationId    String
+  connectionId      String
+  periodStart       DateTime
+  periodEnd         DateTime
+  status            PayrollExportStatus  @default(QUEUED)
+  payload           Json?
+  externalReference String?
+  failureReason     String?
+  createdById       String
+  createdAt         DateTime             @default(now())
+  sentAt            DateTime?
+  reconciledAt      DateTime?
+  organisation      Organisation         @relation(fields: [organisationId], references: [id])
+  connection        AccountingConnection @relation(fields: [connectionId], references: [id])
+  items             PayrollExportItem[]
+
+  @@index([organisationId, createdAt])
+}
+
+model PayrollExportItem {
+  id                String        @id @default(uuid())
+  payrollExportId   String
+  timesheetId       String
+  externalReference String?
+  payrollExport     PayrollExport @relation(fields: [payrollExportId], references: [id])
+  timesheet         Timesheet     @relation(fields: [timesheetId], references: [id])
+
+  @@unique([payrollExportId, timesheetId])
+  @@index([timesheetId])
+}
+
+model Device {
+  id                String
+  organisationId    String
+  userId            String
+  platform          String
+  appVersion        String
+  lastSeenAt        DateTime     @default(now())
+  lastPulledCursor  DateTime?
+  lastPulledEventId String?
+  revokedAt         DateTime?
+  organisation      Organisation @relation(fields: [organisationId], references: [id])
+
+  @@id([organisationId, id])
+  @@index([organisationId, userId])
+}
+
+model MutationReceipt {
+  id             String
+  organisationId String
+  deviceId       String
+  entityType     String
+  entityId       String
+  appliedAt      DateTime     @default(now())
+  response       Json
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+
+  @@id([organisationId, id])
+  @@index([organisationId, deviceId, appliedAt])
+}
+
+model User {
+  id                         String                     @id @default(uuid())
+  organisationId             String
+  email                      String
+  passwordHash               String
+  name                       String
+  role                       Role
+  active                     Boolean                    @default(true)
+  createdAt                  DateTime                   @default(now())
+  signaturePinHash           String?
+  signaturePinSetAt          DateTime?
+  signaturePinFailedAttempts Int                        @default(0)
+  signaturePinLockedUntil    DateTime?
+  organisation               Organisation               @relation(fields: [organisationId], references: [id])
+  worker                     Worker?
+  timesheetApprovalRequests  TimesheetApprovalRequest[] @relation("TimesheetApprover")
+  notifications              Notification[]
+
+  @@unique([organisationId, email])
+}
+
+model Worker {
+  id                      String                   @id @default(uuid())
+  organisationId          String
+  userId                  String?                  @unique
+  employeeNumber          String
+  firstName               String
+  lastName                String
+  employmentType          String
+  classification          String?
+  awardCode               String?
+  baseHourlyRate          Decimal?                 @db.Decimal(12, 2)
+  commencementDate        DateTime
+  terminationDate         DateTime?
+  emergencyContact        Json?
+  payrollDetailsEncrypted String?
+  organisation            Organisation             @relation(fields: [organisationId], references: [id])
+  user                    User?                    @relation(fields: [userId], references: [id])
+  competencies            Competency[]
+  timesheets              Timesheet[]
+  inductions              Induction[]
+  preStarts               PlantPreStart[]
+  payrollMappings         PayrollEmployeeMapping[]
+  safetyAssignments       SafetyAssignment[]
+  safetyAcknowledgements  SafetyAcknowledgement[]
+  ownedCorrectiveActions  CorrectiveAction[]       @relation("CorrectiveActionOwner")
+
+  @@unique([organisationId, employeeNumber])
+}
+
+model Competency {
+  id         String    @id @default(uuid())
+  workerId   String
+  type       String
+  identifier String?
+  issuer     String?
+  issuedAt   DateTime?
+  expiresAt  DateTime?
+  verifiedAt DateTime?
+  documentId String?
+  worker     Worker    @relation(fields: [workerId], references: [id])
+
+  @@index([workerId, expiresAt])
+}
+
+model Project {
+  id                 String               @id @default(uuid())
+  organisationId     String
+  code               String
+  name               String
+  clientName         String?
+  description        String?
+  status             ProjectStatus        @default(TENDER)
+  jurisdiction       String
+  address            String?
+  latitude           Decimal?             @db.Decimal(10, 7)
+  longitude          Decimal?             @db.Decimal(10, 7)
+  contractValue      Decimal?             @db.Decimal(16, 2)
+  startDate          DateTime?
+  endDate            DateTime?
+  organisation       Organisation         @relation(fields: [organisationId], references: [id])
+  costCodes          CostCode[]
+  timesheets         Timesheet[]
+  dailyReports       DailyReport[]
+  safetyDocuments    SafetyDocument[]
+  incidents          Incident[]
+  progressClaims     ProgressClaim[]
+  variations         Variation[]
+  documents          Document[]
+  inductions         Induction[]
+  hazards            HazardRegisterItem[]
+  controlMeasures    ControlMeasure[]
+  hseqInspections    HseqInspection[]
+  safetyObservations SafetyObservation[]
+  permitsToWork      PermitToWork[]
+  correctiveActions  CorrectiveAction[]
+
+  @@unique([organisationId, code])
+}
+
+model CostCode {
+  id              String      @id @default(uuid())
+  projectId       String
+  code            String
+  description     String
+  budgetLabour    Decimal     @default(0) @db.Decimal(14, 2)
+  budgetPlant     Decimal     @default(0) @db.Decimal(14, 2)
+  budgetMaterials Decimal     @default(0) @db.Decimal(14, 2)
+  project         Project     @relation(fields: [projectId], references: [id])
+  entries         TimeEntry[]
+
+  @@unique([projectId, code])
+}
+
+model Timesheet {
+  id                 String                    @id @default(uuid())
+  projectId          String
+  workerId           String
+  weekEnding         DateTime
+  status             Status                    @default(DRAFT)
+  submittedAt        DateTime?
+  approvedAt         DateTime?
+  approvedById       String?
+  correctionReason   String?
+  project            Project                   @relation(fields: [projectId], references: [id])
+  worker             Worker                    @relation(fields: [workerId], references: [id])
+  entries            TimeEntry[]
+  payrollExportItems PayrollExportItem[]
+  contentHash        String?
+  signatures         TimesheetSignature[]
+  approvalRequest    TimesheetApprovalRequest?
+  revision           Int                       @default(1)
+  parentTimesheetId  String?
+  parentTimesheet    Timesheet?                @relation("TimesheetCorrections", fields: [parentTimesheetId], references: [id])
+  corrections        Timesheet[]               @relation("TimesheetCorrections")
+
+  @@unique([projectId, workerId, weekEnding, revision])
+  @@index([parentTimesheetId])
+}
+
+model TimesheetSignature {
+  id                   String                 @id @default(uuid())
+  timesheetId          String
+  signerUserId         String
+  type                 TimesheetSignatureType
+  signedName           String
+  signature            String
+  signatureMethod      String                 @default("DRAWN")
+  timesheetContentHash String
+  consentText          String
+  ipAddress            String?
+  userAgent            String?
+  signedAt             DateTime               @default(now())
+  timesheet            Timesheet              @relation(fields: [timesheetId], references: [id])
+
+  @@unique([timesheetId, type])
+  @@index([signerUserId, signedAt])
+}
+
+model TimesheetApprovalRequest {
+  id                String                @id @default(uuid())
+  timesheetId       String                @unique
+  approverUserId    String
+  requestedByUserId String
+  status            ApprovalRequestStatus @default(PENDING)
+  requestedAt       DateTime              @default(now())
+  respondedAt       DateTime?
+  rejectionReason   String?
+  timesheet         Timesheet             @relation(fields: [timesheetId], references: [id])
+  approver          User                  @relation("TimesheetApprover", fields: [approverUserId], references: [id])
+}
+
+model Notification {
+  id         String    @id @default(uuid())
+  userId     String
+  type       String
+  title      String
+  body       String
+  entityType String
+  entityId   String
+  readAt     DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@index([userId, readAt, createdAt])
+}
+
+model TimeEntry {
+  id                 String    @id @default(uuid())
+  timesheetId        String
+  costCodeId         String?
+  workDate           DateTime
+  startedAt          DateTime
+  finishedAt         DateTime
+  unpaidBreakMinutes Int       @default(0)
+  ordinaryMinutes    Int       @default(0)
+  overtimeMinutes    Int       @default(0)
+  allowanceCodes     String[]
+  notes              String?
+  timesheet          Timesheet @relation(fields: [timesheetId], references: [id])
+  costCode           CostCode? @relation(fields: [costCodeId], references: [id])
+}
+
+model PayRun {
+  id              String   @id @default(uuid())
+  organisationId  String
+  periodStart     DateTime
+  periodEnd       DateTime
+  paymentDate     DateTime
+  status          Status   @default(DRAFT)
+  gross           Decimal  @default(0) @db.Decimal(16, 2)
+  tax             Decimal  @default(0) @db.Decimal(16, 2)
+  superannuation  Decimal  @default(0) @db.Decimal(16, 2)
+  exportFormat    String?
+  exportReference String?
+  createdAt       DateTime @default(now())
+
+  @@index([organisationId, paymentDate])
+}
+
+model Plant {
+  id               String           @id @default(uuid())
+  organisationId   String
+  assetNumber      String
+  type             String
+  make             String?
+  model            String?
+  serialNumber     String?
+  registration     String?
+  hourMeter        Decimal?         @db.Decimal(12, 1)
+  odometerKm       Int?
+  status           String           @default("AVAILABLE")
+  nextServiceAt    DateTime?
+  nextServiceHours Decimal?         @db.Decimal(12, 1)
+  organisation     Organisation     @relation(fields: [organisationId], references: [id])
+  preStarts        PlantPreStart[]
+  clearances       PlantClearance[]
+
+  @@unique([organisationId, assetNumber])
+}
+
+model PlantClearance {
+  id                 String   @id @default(uuid())
+  plantId            String
+  clearedById        String
+  reason             String
+  evidenceDocumentId String?
+  previousStatus     String
+  clearedAt          DateTime @default(now())
+  plant              Plant    @relation(fields: [plantId], references: [id])
+
+  @@index([plantId, clearedAt])
+}
+
+model PlantPreStart {
+  id                  String            @id @default(uuid())
+  plantId             String
+  workerId            String
+  projectId           String?
+  inspectedAt         DateTime          @default(now())
+  hourMeter           Decimal?          @db.Decimal(12, 1)
+  odometerKm          Int?
+  checklistVersion    String
+  checklistTemplateId String?
+  answers             Json
+  result              InspectionResult
+  defects             Json?
+  signature           String?
+  plant               Plant             @relation(fields: [plantId], references: [id])
+  worker              Worker            @relation(fields: [workerId], references: [id])
+  checklistTemplate   PreStartTemplate? @relation(fields: [checklistTemplateId], references: [id])
+
+  @@index([plantId, inspectedAt])
+}
+
+model PreStartTemplate {
+  id             String          @id @default(uuid())
+  organisationId String
+  name           String
+  plantType      String?
+  version        Int             @default(1)
+  status         String          @default("DRAFT")
+  sections       Json
+  createdById    String
+  createdAt      DateTime        @default(now())
+  publishedAt    DateTime?
+  organisation   Organisation    @relation(fields: [organisationId], references: [id])
+  inspections    PlantPreStart[]
+
+  @@unique([organisationId, name, version])
+  @@index([organisationId, plantType, status])
+}
+
+model SafetyDocument {
+  id               String                  @id @default(uuid())
+  projectId        String
+  type             String
+  title            String
+  version          Int                     @default(1)
+  status           Status                  @default(DRAFT)
+  riskLevel        RiskLevel?
+  activities       Json?
+  hazards          Json?
+  controls         Json?
+  approvedById     String?
+  approvedAt       DateTime?
+  reviewDueAt      DateTime?
+  supersedesId     String?
+  contentHash      String?
+  publishedAt      DateTime?
+  project          Project                 @relation(fields: [projectId], references: [id])
+  acknowledgements SafetyAcknowledgement[]
+  assignments      SafetyAssignment[]
+
+  @@unique([projectId, title, version])
+}
+
+model SafetyAssignment {
+  id               String                 @id @default(uuid())
+  safetyDocumentId String
+  workerId         String
+  assignedById     String
+  assignedAt       DateTime               @default(now())
+  dueAt            DateTime?
+  document         SafetyDocument         @relation(fields: [safetyDocumentId], references: [id])
+  worker           Worker                 @relation(fields: [workerId], references: [id])
+  acknowledgement  SafetyAcknowledgement?
+
+  @@unique([safetyDocumentId, workerId])
+  @@index([workerId, dueAt])
+}
+
+model SafetyAcknowledgement {
+  id                  String            @id @default(uuid())
+  safetyDocumentId    String
+  workerId            String
+  assignmentId        String?           @unique
+  acknowledgedAt      DateTime          @default(now())
+  signature           String?
+  signedName          String?
+  signatureMethod     String            @default("DRAWN")
+  documentContentHash String?
+  consentText         String?
+  ipAddress           String?
+  userAgent           String?
+  document            SafetyDocument    @relation(fields: [safetyDocumentId], references: [id])
+  worker              Worker            @relation(fields: [workerId], references: [id])
+  assignment          SafetyAssignment? @relation(fields: [assignmentId], references: [id])
+
+  @@unique([safetyDocumentId, workerId])
+}
+
+model Incident {
+  id                   String             @id @default(uuid())
+  projectId            String
+  occurredAt           DateTime
+  reportedAt           DateTime           @default(now())
+  type                 String
+  severity             RiskLevel
+  description          String
+  immediateActions     String?
+  notifiableAssessment Json?
+  regulatorNotifiedAt  DateTime?
+  investigation        Json?
+  status               Status             @default(ACTIVE)
+  project              Project            @relation(fields: [projectId], references: [id])
+  actions              CorrectiveAction[]
+}
+
+model CorrectiveAction {
+  id                 String              @id @default(uuid())
+  incidentId         String?
+  projectId          String
+  description        String
+  ownerId            String
+  dueAt              DateTime
+  priority           RiskLevel           @default(MEDIUM)
+  status             Status              @default(ACTIVE)
+  source             String?
+  completedAt        DateTime?
+  completionNotes    String?
+  evidenceDocumentId String?
+  hazardId           String?
+  observationId      String?
+  inspectionId       String?
+  permitId           String?
+  createdAt          DateTime            @default(now())
+  incident           Incident?           @relation(fields: [incidentId], references: [id])
+  project            Project             @relation(fields: [projectId], references: [id])
+  owner              Worker              @relation("CorrectiveActionOwner", fields: [ownerId], references: [id])
+  hazard             HazardRegisterItem? @relation(fields: [hazardId], references: [id])
+  observation        SafetyObservation?  @relation(fields: [observationId], references: [id])
+  inspection         HseqInspection?     @relation(fields: [inspectionId], references: [id])
+  permit             PermitToWork?       @relation(fields: [permitId], references: [id])
+
+  @@index([projectId, status, dueAt])
+  @@index([ownerId, status, dueAt])
+}
+
+model HazardRegisterItem {
+  id                String             @id @default(uuid())
+  organisationId    String
+  projectId         String
+  title             String
+  description       String
+  domain            HseqDomain         @default(SAFETY)
+  activity          String?
+  location          String?
+  riskLevel         RiskLevel
+  residualRiskLevel RiskLevel?
+  status            HazardStatus       @default(IDENTIFIED)
+  legalReference    String?
+  reviewDueAt       DateTime?
+  identifiedById    String
+  identifiedAt      DateTime           @default(now())
+  closedAt          DateTime?
+  organisation      Organisation       @relation(fields: [organisationId], references: [id])
+  project           Project            @relation(fields: [projectId], references: [id])
+  controls          ControlMeasure[]
+  correctiveActions CorrectiveAction[]
+
+  @@index([organisationId, status, riskLevel])
+  @@index([projectId, status, reviewDueAt])
+}
+
+model ControlMeasure {
+  id                 String              @id @default(uuid())
+  organisationId     String
+  projectId          String
+  hazardId           String?
+  type               ControlType
+  title              String
+  description        String
+  ownerId            String?
+  verificationMethod String?
+  implementedAt      DateTime?
+  verifiedAt         DateTime?
+  verifiedById       String?
+  reviewDueAt        DateTime?
+  effectiveness      String?
+  evidenceDocumentId String?
+  createdAt          DateTime            @default(now())
+  organisation       Organisation        @relation(fields: [organisationId], references: [id])
+  project            Project             @relation(fields: [projectId], references: [id])
+  hazard             HazardRegisterItem? @relation(fields: [hazardId], references: [id])
+
+  @@index([organisationId, type, reviewDueAt])
+  @@index([projectId, hazardId])
+}
+
+model SafetyObservation {
+  id                String                @id @default(uuid())
+  organisationId    String
+  projectId         String
+  type              SafetyObservationType
+  title             String
+  description       String
+  location          String?
+  riskLevel         RiskLevel?
+  observedAt        DateTime              @default(now())
+  reportedById      String
+  photos            Json?
+  immediateAction   String?
+  status            Status                @default(ACTIVE)
+  organisation      Organisation          @relation(fields: [organisationId], references: [id])
+  project           Project               @relation(fields: [projectId], references: [id])
+  correctiveActions CorrectiveAction[]
+
+  @@index([organisationId, type, status, observedAt])
+  @@index([projectId, observedAt])
+}
+
+model HseqInspection {
+  id                String               @id @default(uuid())
+  organisationId    String
+  projectId         String
+  type              HseqInspectionType
+  title             String
+  location          String?
+  scheduledAt       DateTime?
+  inspectedAt       DateTime             @default(now())
+  inspectedById     String
+  score             Int?
+  result            InspectionResult?
+  status            Status               @default(DRAFT)
+  notes             String?
+  photos            Json?
+  organisation      Organisation         @relation(fields: [organisationId], references: [id])
+  project           Project              @relation(fields: [projectId], references: [id])
+  items             HseqInspectionItem[]
+  correctiveActions CorrectiveAction[]
+
+  @@index([organisationId, type, status, inspectedAt])
+  @@index([projectId, inspectedAt])
+}
+
+model HseqInspectionItem {
+  id                       String           @id @default(uuid())
+  inspectionId             String
+  section                  String?
+  question                 String
+  result                   InspectionResult
+  notes                    String?
+  hazardId                 String?
+  correctiveActionRequired Boolean          @default(false)
+  inspection               HseqInspection   @relation(fields: [inspectionId], references: [id])
+
+  @@index([inspectionId, result])
+}
+
+model PermitToWork {
+  id                String             @id @default(uuid())
+  organisationId    String
+  projectId         String
+  type              PermitType
+  title             String
+  location          String
+  scope             String
+  requestedById     String
+  approvedById      String?
+  status            PermitStatus       @default(DRAFT)
+  startsAt          DateTime
+  expiresAt         DateTime
+  closedAt          DateTime?
+  isolationDetails  Json?
+  hazards           Json?
+  controls          Json?
+  signOns           Json?
+  attachments       Json?
+  organisation      Organisation       @relation(fields: [organisationId], references: [id])
+  project           Project            @relation(fields: [projectId], references: [id])
+  correctiveActions CorrectiveAction[]
+
+  @@index([organisationId, type, status, startsAt])
+  @@index([projectId, status, expiresAt])
+}
+
+model Induction {
+  id          String    @id @default(uuid())
+  projectId   String
+  workerId    String
+  type        String
+  version     String
+  completedAt DateTime
+  expiresAt   DateTime?
+  score       Int?
+  signature   String?
+  project     Project   @relation(fields: [projectId], references: [id])
+  worker      Worker    @relation(fields: [workerId], references: [id])
+
+  @@unique([projectId, workerId, type, version])
+}
+
+model DailyReport {
+  id            String   @id @default(uuid())
+  projectId     String
+  reportDate    DateTime
+  weather       Json?
+  personnel     Json
+  plant         Json
+  activities    Json
+  quantities    Json?
+  delays        Json?
+  visitors      Json?
+  safetyNotes   String?
+  photos        Json?
+  submittedById String
+  status        Status   @default(DRAFT)
+  project       Project  @relation(fields: [projectId], references: [id])
+
+  @@unique([projectId, reportDate])
+}
+
+model Tender {
+  id                  String                @id @default(uuid())
+  organisationId      String
+  reference           String
+  title               String
+  clientName          String
+  jurisdiction        String
+  closesAt            DateTime
+  status              Status                @default(DRAFT)
+  scope               String?
+  estimate            Json?
+  risks               Json?
+  clarifications      Json?
+  submissionChecklist Json?
+  submittedAt         DateTime?
+  outcome             String?
+  organisation        Organisation          @relation(fields: [organisationId], references: [id])
+  documents           TenderDocument[]
+  requirements        TenderRequirement[]
+  checklistItems      TenderChecklistItem[]
+
+  @@unique([organisationId, reference])
+}
+
+model TenderDocument {
+  id               String              @id @default(uuid())
+  tenderId         String
+  name             String
+  mimeType         String
+  storageKey       String
+  sha256           String
+  sizeBytes        Int
+  processingStatus String              @default("PENDING")
+  processingError  String?
+  pageCount        Int?
+  uploadedById     String
+  uploadedAt       DateTime            @default(now())
+  tender           Tender              @relation(fields: [tenderId], references: [id])
+  requirements     TenderRequirement[]
+
+  @@unique([tenderId, sha256])
+  @@index([tenderId, uploadedAt])
+}
+
+model TenderRequirement {
+  id             String                @id @default(uuid())
+  tenderId       String
+  documentId     String
+  category       String
+  title          String
+  detail         String
+  mandatory      Boolean               @default(false)
+  confidence     Decimal               @db.Decimal(4, 3)
+  sourcePage     Int?
+  sourceSheet    String?
+  sourceExcerpt  String
+  reviewStatus   String                @default("SUGGESTED")
+  createdAt      DateTime              @default(now())
+  tender         Tender                @relation(fields: [tenderId], references: [id])
+  document       TenderDocument        @relation(fields: [documentId], references: [id])
+  checklistItems TenderChecklistItem[]
+
+  @@index([tenderId, category])
+}
+
+model TenderChecklistItem {
+  id            String             @id @default(uuid())
+  tenderId      String
+  requirementId String?
+  title         String
+  description   String?
+  mandatory     Boolean            @default(false)
+  status        String             @default("TODO")
+  ownerId       String?
+  dueAt         DateTime?
+  completedAt   DateTime?
+  tender        Tender             @relation(fields: [tenderId], references: [id])
+  requirement   TenderRequirement? @relation(fields: [requirementId], references: [id])
+
+  @@index([tenderId, status])
+}
+
+model ProgressClaim {
+  id              String    @id @default(uuid())
+  projectId       String
+  claimNumber     Int
+  periodEnd       DateTime
+  claimedAmount   Decimal   @db.Decimal(16, 2)
+  certifiedAmount Decimal?  @db.Decimal(16, 2)
+  retentionAmount Decimal?  @db.Decimal(16, 2)
+  submittedAt     DateTime?
+  dueAt           DateTime?
+  paidAt          DateTime?
+  status          Status    @default(DRAFT)
+  breakdown       Json
+  project         Project   @relation(fields: [projectId], references: [id])
+
+  @@unique([projectId, claimNumber])
+}
+
+model Variation {
+  id             String    @id @default(uuid())
+  projectId      String
+  reference      String
+  title          String
+  description    String
+  cause          String?
+  noticeDate     DateTime?
+  quotedAmount   Decimal?  @db.Decimal(16, 2)
+  approvedAmount Decimal?  @db.Decimal(16, 2)
+  extensionDays  Int?
+  status         Status    @default(DRAFT)
+  project        Project   @relation(fields: [projectId], references: [id])
+
+  @@unique([projectId, reference])
+}
+
+model Document {
+  id             String    @id @default(uuid())
+  projectId      String?
+  category       String
+  name           String
+  mimeType       String
+  storageKey     String
+  sha256         String
+  version        Int       @default(1)
+  uploadedById   String
+  createdAt      DateTime  @default(now())
+  retentionUntil DateTime?
+  project        Project?  @relation(fields: [projectId], references: [id])
+
+  @@index([projectId, category])
+}
+
+model AuditEvent {
+  id             String       @id @default(uuid())
+  organisationId String
+  actorId        String?
+  action         String
+  entityType     String
+  entityId       String
+  before         Json?
+  after          Json?
+  reason         String?
+  ipAddress      String?
+  occurredAt     DateTime     @default(now())
+  organisation   Organisation @relation(fields: [organisationId], references: [id])
+
+  @@index([organisationId, entityType, entityId, occurredAt])
+}

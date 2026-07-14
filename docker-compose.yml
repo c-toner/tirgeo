@@ -1,0 +1,43 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://tirgeo:tirgeo@postgres:5432/tirgeo
+      JWT_SECRET: change-me-to-a-strong-32-character-secret
+      PORT: 3000
+      HOST: 0.0.0.0
+      STORAGE_PATH: /app/data/uploads
+      CORS_ORIGINS: http://localhost:3000,http://localhost:5173,http://localhost:8080
+      TRUST_PROXY: "false"
+      JWT_ISSUER: tirgeo-backend
+      JWT_AUDIENCE: tirgeo-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports: ["3000:3000"]
+    volumes: ["tirgeo_uploads:/app/data/uploads"]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ready || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: tirgeo
+      POSTGRES_PASSWORD: tirgeo
+      POSTGRES_DB: tirgeo
+    ports: ["5432:5432"]
+    volumes: ["tirgeo_postgres:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tirgeo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+volumes:
+  tirgeo_postgres:
+  tirgeo_uploads:
