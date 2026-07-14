@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Web + field UI for the TirGeo civil construction operations platform",
+  "engines": {
+    "node": ">=22 <25"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

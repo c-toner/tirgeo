@@ -96,8 +96,15 @@ export interface AuthUser {
   signaturePinRequired: boolean;
 }
 
+export interface AuthOrganisation {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 export interface LoginResponse {
   token: string;
+  organisation: AuthOrganisation;
   user: AuthUser;
 }
 

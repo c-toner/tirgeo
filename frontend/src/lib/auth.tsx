@@ -8,7 +8,7 @@ import { navigate } from "./router.tsx";
 interface AuthContextValue {
   user: AuthUser | null;
   organisationId: string;
-  login: (organisationId: string, email: string, password: string) => Promise<void>;
+  login: (organisation: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   hasRole: (...roles: Role[]) => boolean;
 }
@@ -26,12 +26,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const login = useCallback(async (organisationId: string, email: string, password: string) => {
+  const login = useCallback(async (organisation: string, email: string, password: string) => {
     const result = await api<LoginResponse>("/api/v1/auth/login", {
       method: "POST",
-      body: { organisationId, email, password },
+      body: { organisation, email, password },
     });
-    storeSession(result.token, result.user, organisationId);
+    storeSession(result.token, result.user, result.organisation.id, result.organisation.slug);
     invalidate();
     setUser(result.user);
   }, []);

@@ -3,12 +3,18 @@ import bcrypt from "bcrypt";
 import { z } from "zod";
 import { authed } from "../lib/access.js";
 
+const toOrganisationSlug = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+
 const routes: FastifyPluginAsync = async (app) => {
   app.post("/login", { config: { rateLimit: { max: 10, timeWindow: "15 minutes" } } }, async (req, reply) => {
-    const body = z.object({ organisationId: z.string().uuid(), email: z.string().email(), password: z.string() }).parse(req.body);
-    const user = await app.prisma.user.findUnique({ where: { organisationId_email: { organisationId: body.organisationId, email: body.email.toLowerCase() } } });
+    const body = z.object({ organisationId: z.string().uuid().optional(), organisation: z.string().min(1).optional(), email: z.string().email(), password: z.string() }).refine(v => v.organisationId || v.organisation, "organisation or organisationId is required").parse(req.body);
+    const organisation = body.organisationId
+      ? await app.prisma.organisation.findUnique({ where: { id: body.organisationId }, select: { id: true, name: true, slug: true } })
+      : await app.prisma.organisation.findUnique({ where: { slug: toOrganisationSlug(body.organisation!) }, select: { id: true, name: true, slug: true } });
+    if (!organisation) return reply.code(401).send({ error: "Invalid credentials" });
+    const user = await app.prisma.user.findUnique({ where: { organisationId_email: { organisationId: organisation.id, email: body.email.toLowerCase() } } });
     if (!user?.active || !(await bcrypt.compare(body.password, user.passwordHash))) return reply.code(401).send({ error: "Invalid credentials" });
-    return { token: app.jwt.sign({ sub: user.id, organisationId: user.organisationId, role: user.role }, { expiresIn: "12h" }), user: { id: user.id, name: user.name, role: user.role, signaturePinRequired: !user.signaturePinHash } };
+    return { token: app.jwt.sign({ sub: user.id, organisationId: user.organisationId, role: user.role }, { expiresIn: "12h" }), organisation, user: { id: user.id, name: user.name, role: user.role, signaturePinRequired: !user.signaturePinHash } };
   });
   app.put("/signature-pin", { preHandler: authed, config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (req, reply) => {
     const body = z.object({ pin: z.string().regex(/^\d{4}$/, "PIN must contain exactly four digits"), currentPin: z.string().regex(/^\d{4}$/).optional() }).parse(req.body);

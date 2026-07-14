@@ -5,6 +5,9 @@ import rateLimit from "@fastify/rate-limit";
 import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import multipart from "@fastify/multipart";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import path from "node:path";
 import database from "./plugins/database.js";
 import auth from "./plugins/auth.js";
 import authRoutes from "./routes/auth.js";
@@ -17,8 +20,32 @@ import commercialRoutes from "./routes/commercial.js";
 import syncRoutes from "./routes/sync.js";
 import payrollRoutes from "./routes/payroll.js";
 import notificationRoutes from "./routes/notifications.js";
+import fileRoutes from "./routes/files.js";
 import { Prisma } from "@prisma/client";
 import { config, corsOrigins } from "./config.js";
+
+const frontendDistDir = path.resolve(process.env.FRONTEND_DIST_DIR ?? path.join(process.cwd(), "frontend", "dist"));
+const mimeTypes: Record<string, string> = {
+  ".css": "text/css; charset=utf-8",
+  ".html": "text/html; charset=utf-8",
+  ".ico": "image/x-icon",
+  ".js": "text/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".map": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".txt": "text/plain; charset=utf-8",
+  ".webp": "image/webp",
+};
+
+async function fileExists(filePath: string) {
+  try {
+    const info = await stat(filePath);
+    return info.isFile();
+  } catch {
+    return false;
+  }
+}
 
 export async function buildApp() {
   const app = Fastify({ logger: { redact: ["req.headers.authorization", "body.password", "body.pin", "body.currentPin", "body.payrollDetailsEncrypted"] }, trustProxy: config.TRUST_PROXY });
@@ -44,6 +71,20 @@ export async function buildApp() {
   await app.register(syncRoutes, { prefix: "/api/v1/sync" });
   await app.register(payrollRoutes, { prefix: "/api/v1/payroll" });
   await app.register(notificationRoutes, { prefix: "/api/v1/notifications" });
+  await app.register(fileRoutes, { prefix: "/api/v1/files" });
+  app.get("/*", async (req, reply) => {
+    const requestPath = new URL(req.raw.url ?? "/", "http://localhost").pathname;
+    if (requestPath.startsWith("/api/")) return reply.code(404).send({ error: "Route not found", code: "NOT_FOUND" });
+
+    const decodedPath = decodeURIComponent(requestPath);
+    const candidate = path.resolve(frontendDistDir, decodedPath === "/" ? "index.html" : decodedPath.slice(1));
+    const safeCandidate = candidate === frontendDistDir || candidate.startsWith(`${frontendDistDir}${path.sep}`);
+    const filePath = safeCandidate && await fileExists(candidate) ? candidate : path.join(frontendDistDir, "index.html");
+
+    if (!await fileExists(filePath)) return reply.code(404).send({ error: "Frontend build not found", code: "FRONTEND_NOT_BUILT" });
+    reply.type(mimeTypes[path.extname(filePath)] ?? "application/octet-stream");
+    return reply.send(createReadStream(filePath));
+  });
   app.setErrorHandler((error, _req, reply) => {
     const err = error as Error & { statusCode?: number };
     if (err.name === "ZodError") return reply.code(400).send({ error: "Validation failed", code: "VALIDATION_ERROR", details: JSON.parse(err.message) });

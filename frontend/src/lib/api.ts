@@ -9,7 +9,9 @@
 const TOKEN_KEY = "tirgeo.token";
 const USER_KEY = "tirgeo.user";
 const ORG_KEY = "tirgeo.organisationId";
+const ORG_IDENTIFIER_KEY = "tirgeo.organisation";
 const API_BASE_KEY = "tirgeo.apiBase";
+const DEFAULT_API_BASE = import.meta.env.VITE_API_BASE_URL?.replace(/\/+$/, "") ?? "";
 
 export interface FieldIssue {
   path: Array<string | number>;
@@ -43,7 +45,7 @@ export class ApiError extends Error {
 
 export function getApiBase(): string {
   // Same-origin by default (vite dev proxy / reverse proxy in production).
-  return localStorage.getItem(API_BASE_KEY) ?? "";
+  return localStorage.getItem(API_BASE_KEY) ?? DEFAULT_API_BASE;
 }
 
 export function setApiBase(base: string) {
@@ -70,10 +72,15 @@ export function getStoredOrganisationId(): string {
   return localStorage.getItem(ORG_KEY) ?? "";
 }
 
-export function storeSession(token: string, user: unknown, organisationId: string) {
+export function getStoredOrganisationIdentifier(): string {
+  return localStorage.getItem(ORG_IDENTIFIER_KEY) ?? localStorage.getItem(ORG_KEY) ?? "";
+}
+
+export function storeSession(token: string, user: unknown, organisationId: string, organisationIdentifier: string) {
   sessionStorage.setItem(TOKEN_KEY, token);
   sessionStorage.setItem(USER_KEY, JSON.stringify(user));
   localStorage.setItem(ORG_KEY, organisationId);
+  localStorage.setItem(ORG_IDENTIFIER_KEY, organisationIdentifier);
 }
 
 export function clearSession() {

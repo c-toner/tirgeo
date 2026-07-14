@@ -2,12 +2,12 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useAuth } from "../lib/auth.tsx";
 import { navigate } from "../lib/router.tsx";
-import { ApiError, getApiBase, getStoredOrganisationId, setApiBase } from "../lib/api.ts";
+import { ApiError, getApiBase, getStoredOrganisationIdentifier, setApiBase } from "../lib/api.ts";
 import { ErrorAlert, Field, Icon, TextInput } from "../components/ui.tsx";
 
 export function LoginPage() {
   const { login } = useAuth();
-  const [organisationId, setOrganisationId] = useState(getStoredOrganisationId());
+  const [organisation, setOrganisation] = useState(getStoredOrganisationIdentifier());
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [apiBase, setApiBaseState] = useState(getApiBase());
@@ -21,7 +21,7 @@ export function LoginPage() {
     setError(null);
     setApiBase(apiBase);
     try {
-      await login(organisationId.trim(), email.trim(), password);
+      await login(organisation.trim(), email.trim(), password);
       navigate("/");
     } catch (err) {
       setError(err instanceof ApiError ? err : new ApiError(0, String(err)));
@@ -46,12 +46,12 @@ export function LoginPage() {
         <form className="stack" style={{ gap: 14 }} onSubmit={submit}>
           <ErrorAlert error={error} onDismiss={() => setError(null)} />
           <Field
-            label="Organisation ID"
+            label="Organisation"
             required
-            error={fieldErrors["organisationId"]}
-            hint="Provided by your administrator (UUID printed by the seed script for demo environments)."
+            error={fieldErrors["organisation"]}
+            hint="Use your company name or login slug, for example Progress Civil."
           >
-            <TextInput value={organisationId} onChange={setOrganisationId} mono placeholder="00000000-0000-0000-0000-000000000000" autoComplete="organization" />
+            <TextInput value={organisation} onChange={setOrganisation} placeholder="Progress Civil" autoComplete="organization" />
           </Field>
           <Field label="Email" required error={fieldErrors["email"]}>
             <TextInput value={email} onChange={setEmail} type="email" placeholder="you@company.com.au" autoComplete="username" inputMode="email" />
@@ -60,7 +60,7 @@ export function LoginPage() {
             <TextInput value={password} onChange={setPassword} type="password" autoComplete="current-password" />
           </Field>
 
-          <button className="btn btn-primary" style={{ padding: "11px 14px", fontSize: 14.5 }} disabled={busy || !organisationId || !email || !password}>
+          <button className="btn btn-primary" style={{ padding: "11px 14px", fontSize: 14.5 }} disabled={busy || !organisation || !email || !password}>
             {busy ? "Signing in…" : "Sign in"}
           </button>
 

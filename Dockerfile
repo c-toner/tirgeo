@@ -2,11 +2,14 @@ FROM node:22-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN npm --prefix frontend ci
 COPY tsconfig.json ./
 COPY prisma ./prisma
 COPY src ./src
 COPY tests ./tests
-RUN npm run db:generate && npm run build
+COPY frontend ./frontend
+RUN npm run frontend:build && npm run db:generate && npm run build
 
 FROM node:22-alpine AS runtime
 WORKDIR /app
@@ -17,6 +20,7 @@ COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
+COPY --from=build /app/frontend/dist ./frontend/dist
 RUN mkdir -p /app/data/uploads && chown -R node:node /app/data
 USER node
 EXPOSE 3000

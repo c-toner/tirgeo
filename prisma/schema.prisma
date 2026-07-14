@@ -151,9 +151,19 @@ enum PermitStatus {
   CANCELLED
 }
 
+enum FileStorageProvider {
+  VERCEL_BLOB
+}
+
+enum FileAccess {
+  PRIVATE
+  PUBLIC
+}
+
 model Organisation {
   id                    String                 @id @default(uuid())
   name                  String
+  slug                  String                 @unique
   abn                   String?                @unique
   timezone              String                 @default("Australia/Sydney")
   createdAt             DateTime               @default(now())
@@ -173,6 +183,7 @@ model Organisation {
   hseqInspections       HseqInspection[]
   safetyObservations    SafetyObservation[]
   permitsToWork         PermitToWork[]
+  fileAssets            FileAsset[]
 }
 
 model AccountingConnection {
@@ -374,6 +385,7 @@ model Project {
   safetyObservations SafetyObservation[]
   permitsToWork      PermitToWork[]
   correctiveActions  CorrectiveAction[]
+  fileAssets         FileAsset[]
 
   @@unique([organisationId, code])
 }
@@ -983,6 +995,35 @@ model Document {
   project        Project?  @relation(fields: [projectId], references: [id])
 
   @@index([projectId, category])
+}
+
+model FileAsset {
+  id             String              @id @default(uuid())
+  organisationId String
+  projectId      String?
+  uploadedById   String
+  entityType     String?
+  entityId       String?
+  provider       FileStorageProvider @default(VERCEL_BLOB)
+  access         FileAccess          @default(PRIVATE)
+  pathname       String
+  url            String
+  downloadUrl    String?
+  mimeType       String
+  sizeBytes      Int
+  sha256         String?
+  originalName   String
+  description    String?
+  metadata       Json?
+  createdAt      DateTime            @default(now())
+  deletedAt      DateTime?
+  organisation   Organisation        @relation(fields: [organisationId], references: [id])
+  project        Project?            @relation(fields: [projectId], references: [id])
+
+  @@unique([organisationId, pathname])
+  @@index([organisationId, entityType, entityId])
+  @@index([organisationId, projectId, createdAt])
+  @@index([uploadedById, createdAt])
 }
 
 model AuditEvent {
