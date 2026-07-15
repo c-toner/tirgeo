@@ -7,6 +7,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import multipart from "@fastify/multipart";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import path from "node:path";
 import database from "./plugins/database.js";
 import auth from "./plugins/auth.js";
@@ -97,4 +98,15 @@ export async function buildApp() {
     app.log.error(err); return reply.code(err.statusCode ?? 500).send({ error: err.statusCode ? err.message : "Internal server error" });
   });
   return app;
+}
+
+let appPromise: ReturnType<typeof buildApp> | undefined;
+
+export default async function handler(req: IncomingMessage, res: ServerResponse) {
+  appPromise ??= buildApp().then(async app => {
+    await app.ready();
+    return app;
+  });
+  const app = await appPromise;
+  app.server.emit("request", req, res);
 }
