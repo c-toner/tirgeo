@@ -1,4 +1,3 @@
-import { PDFParse } from "pdf-parse";
 import mammoth from "mammoth";
 import ExcelJS from "exceljs";
 
@@ -12,6 +11,7 @@ export async function extractTenderText(buffer: Buffer, mimeType: string, filena
   if (["docx", "xlsx"].includes(ext ?? "") && !isZip) throw Object.assign(new Error("File content is not a valid Office document"), { statusCode: 415 });
   if (["txt", "csv"].includes(ext ?? "") && buffer.includes(0)) throw Object.assign(new Error("Text files cannot contain binary data"), { statusCode: 415 });
   if (mimeType === "application/pdf" || ext === "pdf") {
+    const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
     try {
       const result = await parser.getText();
