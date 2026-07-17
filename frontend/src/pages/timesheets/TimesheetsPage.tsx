@@ -15,10 +15,11 @@ import {
 } from "../../components/ui.tsx";
 import { SignaturePad } from "../../components/SignaturePad.tsx";
 import type { SignatureValue } from "../../components/SignaturePad.tsx";
+import { WorkerSelect } from "../../components/WorkerSelect.tsx";
 import { api } from "../../lib/api.ts";
 import { TIMESHEET_APPROVERS, useAuth } from "../../lib/auth.tsx";
 import { formatDate, minutesToHours, titleCase, uuid } from "../../lib/format.ts";
-import { getMyWorkerId, listRecents, rememberRecent, updateRecent } from "../../lib/recents.ts";
+import { listRecents, rememberRecent, updateRecent } from "../../lib/recents.ts";
 import { usePath } from "../../lib/router.tsx";
 import type { ApproverSummary, Timesheet } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
@@ -68,7 +69,7 @@ function defaultWeekEnding(): string {
 function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCreated: (timesheet: Timesheet) => void }) {
   const toast = useToast();
   const [projectId, setProjectId] = useState("");
-  const [workerId, setWorkerId] = useState(getMyWorkerId());
+  const [workerId, setWorkerId] = useState("");
   const [weekEnding, setWeekEnding] = useState(defaultWeekEnding());
   const [entries, setEntries] = useState<EntryDraft[]>([newEntry()]);
 
@@ -176,8 +177,8 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
         <Field label="Week ending" required hint="All entries must fall in this week (organisation timezone).">
           <TextInput value={weekEnding} onChange={setWeekEnding} type="date" />
         </Field>
-        <Field label="Worker ID" required span2 hint="Your worker record UUID — save it once in Settings. Workers can only create their own timecards.">
-          <TextInput value={workerId} onChange={setWorkerId} mono placeholder="worker UUID" />
+        <Field label="Worker" required span2 hint="Your linked worker is selected by default. Workers can only create their own timecards.">
+          <WorkerSelect value={workerId} onChange={setWorkerId} />
         </Field>
       </div>
 

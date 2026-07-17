@@ -22,6 +22,7 @@ import syncRoutes from "./routes/sync.js";
 import payrollRoutes from "./routes/payroll.js";
 import notificationRoutes from "./routes/notifications.js";
 import fileRoutes from "./routes/files.js";
+import workerRoutes from "./routes/workers.js";
 import { Prisma } from "@prisma/client";
 import { config, corsOrigins } from "./config.js";
 
@@ -73,6 +74,7 @@ export async function buildApp() {
   await app.register(payrollRoutes, { prefix: "/api/v1/payroll" });
   await app.register(notificationRoutes, { prefix: "/api/v1/notifications" });
   await app.register(fileRoutes, { prefix: "/api/v1/files" });
+  await app.register(workerRoutes, { prefix: "/api/v1/workers" });
   app.get("/*", async (req, reply) => {
     const requestPath = new URL(req.raw.url ?? "/", "http://localhost").pathname;
     if (requestPath.startsWith("/api/")) return reply.code(404).send({ error: "Route not found", code: "NOT_FOUND" });

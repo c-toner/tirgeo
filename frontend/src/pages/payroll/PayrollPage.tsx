@@ -11,6 +11,7 @@ import {
   TextInput,
   useToast,
 } from "../../components/ui.tsx";
+import { WorkerSelect } from "../../components/WorkerSelect.tsx";
 import { api } from "../../lib/api.ts";
 import { formatDate, isoDateOnly } from "../../lib/format.ts";
 import { listRecents, rememberRecent, updateRecent } from "../../lib/recents.ts";
@@ -98,8 +99,8 @@ function ConnectionCard({ provider }: { provider: AccountingProvider }) {
         <div className="stack">
           <b style={{ fontSize: 13.5 }}>Employee mapping</b>
           <div className="row" style={{ alignItems: "flex-end" }}>
-            <Field label="Worker ID">
-              <TextInput value={workerId} onChange={setWorkerId} mono placeholder="worker UUID" />
+            <Field label="Worker">
+              <WorkerSelect value={workerId} onChange={setWorkerId} allowEmpty autoSelectCurrent={false} emptyLabel="Select a worker" />
             </Field>
             <Field label={`${provider} employee ID`}>
               <TextInput value={externalEmployeeId} onChange={setExternalEmployeeId} mono />

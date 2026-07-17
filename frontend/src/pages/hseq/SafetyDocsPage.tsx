@@ -13,6 +13,7 @@ import {
   TextInput,
   useToast,
 } from "../../components/ui.tsx";
+import { WorkerMultiSelect } from "../../components/WorkerSelect.tsx";
 import { api } from "../../lib/api.ts";
 import { DOCUMENT_APPROVERS, DOCUMENT_AUTHORS, useAuth } from "../../lib/auth.tsx";
 import { formatDate, titleCase } from "../../lib/format.ts";
@@ -136,14 +137,13 @@ function CreateDocumentModal({ onClose }: { onClose: () => void }) {
 
 function PublishModal({ documentId, onClose }: { documentId: string; onClose: () => void }) {
   const toast = useToast();
-  const [workerIds, setWorkerIds] = useState("");
+  const [workerIds, setWorkerIds] = useState<string[]>([]);
   const [dueAt, setDueAt] = useState("");
-  const ids = linesToItems(workerIds);
   const mutation = useMutation(
     () =>
       api(`/api/v1/safety/documents/${documentId}/publish`, {
         method: "POST",
-        body: { workerIds: ids, dueAt: dueAt ? new Date(dueAt).toISOString() : undefined },
+        body: { workerIds, dueAt: dueAt ? new Date(dueAt).toISOString() : undefined },
       }),
     [],
   );
@@ -158,29 +158,25 @@ function PublishModal({ documentId, onClose }: { documentId: string; onClose: ()
           </button>
           <button
             className="btn btn-primary"
-            disabled={mutation.running || ids.length === 0}
+            disabled={mutation.running || workerIds.length === 0}
             onClick={() =>
               mutation.run({
                 onSuccess: () => {
                   updateRecent("safety-docs", documentId, { status: "PUBLISHED" });
-                  toast.push(`Assigned to ${ids.length} worker(s)`);
+                  toast.push(`Assigned to ${workerIds.length} worker(s)`);
                   onClose();
                 },
               })
             }
           >
-            {mutation.running ? "Publishing…" : `Publish to ${ids.length || "…"} worker(s)`}
+            {mutation.running ? "Publishing…" : `Publish to ${workerIds.length || "…"} worker(s)`}
           </button>
         </>
       }
     >
       <ErrorAlert error={mutation.error} onDismiss={mutation.reset} />
-      <Field
-        label="Worker IDs (one per line)"
-        required
-        hint="The API has no worker directory endpoint yet — paste worker UUIDs from your admin records."
-      >
-        <TextArea value={workerIds} onChange={setWorkerIds} rows={5} placeholder={"7c31…\n9ab2…"} />
+      <Field label="Workers" required hint="Search by name, employee number or classification.">
+        <WorkerMultiSelect value={workerIds} onChange={setWorkerIds} />
       </Field>
       <Field label="Acknowledgement due">
         <TextInput value={dueAt} onChange={setDueAt} type="date" />

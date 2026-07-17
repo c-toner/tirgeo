@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Layout } from "../components/Layout.tsx";
 import { ErrorAlert, Field, TextInput, useToast } from "../components/ui.tsx";
+import { WorkerSelect } from "../components/WorkerSelect.tsx";
 import { api, getApiBase, setApiBase } from "../lib/api.ts";
 import { useAuth } from "../lib/auth.tsx";
 import { getMyWorkerId, setMyWorkerId } from "../lib/recents.ts";
@@ -21,7 +22,7 @@ export function SettingsPage() {
     [],
   );
 
-  const [workerId, setWorkerId] = useState(getMyWorkerId());
+  const [workerId, setWorkerId] = useState(() => getMyWorkerId() || user?.worker?.id || "");
   const [apiBase, setApiBaseState] = useState(getApiBase());
 
   return (
@@ -83,20 +84,20 @@ export function SettingsPage() {
         <div>
           <h2>My worker record</h2>
           <p className="muted">
-            Timecards, plant pre-starts and action ownership need your worker UUID. The API does not expose a worker
-            directory yet, so save it here once (ask your administrator for it) and forms will pre-fill.
+            Timecards, plant pre-starts and action ownership use worker records. Your linked worker is listed first;
+            save an override on this device only if an administrator asks you to.
           </p>
         </div>
         <div className="row" style={{ alignItems: "flex-end" }}>
-          <Field label="Worker ID">
-            <TextInput value={workerId} onChange={setWorkerId} mono placeholder="e.g. 3f8a1c2e-…" />
+          <Field label="Worker">
+            <WorkerSelect value={workerId} onChange={setWorkerId} allowEmpty autoSelectCurrent={false} emptyLabel="Use linked worker" />
           </Field>
           <button
             className="btn btn-primary"
             style={{ marginBottom: 4 }}
             onClick={() => {
               setMyWorkerId(workerId);
-              toast.push(workerId.trim() ? "Worker ID saved on this device" : "Worker ID cleared");
+              toast.push(workerId.trim() ? "Worker preference saved on this device" : "Worker preference cleared");
             }}
           >
             Save

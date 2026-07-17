@@ -15,10 +15,10 @@ import {
   TextInput,
   useToast,
 } from "../../components/ui.tsx";
+import { WorkerSelect } from "../../components/WorkerSelect.tsx";
 import { api } from "../../lib/api.ts";
 import { HSEQ_EDITORS, useAuth } from "../../lib/auth.tsx";
 import { formatDate, isOverdue } from "../../lib/format.ts";
-import { getMyWorkerId } from "../../lib/recents.ts";
 import type { CorrectiveAction } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
 
@@ -46,7 +46,7 @@ function CreateActionModal({ onClose }: { onClose: () => void }) {
   const [form, setForm] = useState({
     projectId: "",
     description: "",
-    ownerId: getMyWorkerId(),
+    ownerId: "",
     dueAt: "",
     priority: "MEDIUM",
     source: "",
@@ -109,13 +109,8 @@ function CreateActionModal({ onClose }: { onClose: () => void }) {
         <Field label="What needs to happen" required span2 error={mutation.fieldErrors["description"]}>
           <TextArea value={form.description} onChange={set("description")} />
         </Field>
-        <Field
-          label="Owner (worker ID)"
-          required
-          error={mutation.fieldErrors["ownerId"]}
-          hint="Worker UUID. The API does not list workers yet — save yours in Settings for one-tap reuse."
-        >
-          <TextInput value={form.ownerId} onChange={set("ownerId")} mono placeholder="worker UUID" />
+        <Field label="Owner" required error={mutation.fieldErrors["ownerId"]}>
+          <WorkerSelect value={form.ownerId} onChange={set("ownerId")} />
         </Field>
         <Field label="Due" required error={mutation.fieldErrors["dueAt"]}>
           <TextInput value={form.dueAt} onChange={set("dueAt")} type="date" />

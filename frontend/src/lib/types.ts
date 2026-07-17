@@ -94,6 +94,7 @@ export interface AuthUser {
   name: string;
   role: Role;
   signaturePinRequired: boolean;
+  worker?: WorkerSummary | null;
 }
 
 export interface AuthOrganisation {
@@ -180,6 +181,18 @@ export interface Plant {
   odometerKm?: number | null;
   nextServiceAt?: string | null;
   nextServiceHours?: number | null;
+}
+
+export interface WorkerSummary {
+  id: string;
+  userId?: string | null;
+  employeeNumber: string;
+  firstName: string;
+  lastName: string;
+  employmentType: string;
+  classification?: string | null;
+  terminationDate?: string | null;
+  isCurrentUser?: boolean;
 }
 
 export type PreStartQuestionType = "PASS_FAIL_NA" | "BOOLEAN" | "TEXT" | "NUMBER";

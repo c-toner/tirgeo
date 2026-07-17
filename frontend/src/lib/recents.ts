@@ -42,9 +42,8 @@ export function forgetRecent(kind: string, id: string) {
   localStorage.setItem(storageKey(kind), JSON.stringify(listRecents(kind).filter((r) => r.id !== id)));
 }
 
-// Worker identity: the backend has no "my worker record" endpoint yet, so the
-// user saves their worker ID once (Settings) and the app reuses it for
-// timesheets, pre-starts and corrective-action ownership.
+// Optional per-device worker override. Normal forms use the worker directory and
+// the signed-in user's linked worker by default.
 const WORKER_KEY = "tirgeo.workerId";
 
 export function getMyWorkerId(): string {

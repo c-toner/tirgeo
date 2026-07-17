@@ -16,10 +16,10 @@ import {
 } from "../../components/ui.tsx";
 import { SignaturePad } from "../../components/SignaturePad.tsx";
 import type { SignatureValue } from "../../components/SignaturePad.tsx";
+import { WorkerSelect } from "../../components/WorkerSelect.tsx";
 import { api } from "../../lib/api.ts";
 import { PLANT_CLEARERS, PROJECT_LEADERS, TEMPLATE_ADMINS, useAuth } from "../../lib/auth.tsx";
 import { formatDate, titleCase } from "../../lib/format.ts";
-import { getMyWorkerId } from "../../lib/recents.ts";
 import { Link } from "../../lib/router.tsx";
 import type { InspectionResult, Plant, PreStartDefect, PreStartTemplate } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
@@ -102,7 +102,7 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
     plantType: plant.type,
   });
   const [templateId, setTemplateId] = useState("");
-  const [workerId, setWorkerId] = useState(getMyWorkerId());
+  const [workerId, setWorkerId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [hourMeter, setHourMeter] = useState("");
   const [answers, setAnswers] = useState<Record<string, boolean | string | number | null>>({});
@@ -238,8 +238,8 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
             }))}
           />
         </Field>
-        <Field label="Worker ID" required hint="Must be the worker linked to your login. Save it once in Settings.">
-          <TextInput value={workerId} onChange={setWorkerId} mono placeholder="worker UUID" />
+        <Field label="Worker" required hint="Your linked worker is selected by default.">
+          <WorkerSelect value={workerId} onChange={setWorkerId} />
         </Field>
         <Field label="Project (optional)">
           <ProjectSelect value={projectId} onChange={setProjectId} allowEmpty emptyLabel="Not project-specific" activeOnly />
