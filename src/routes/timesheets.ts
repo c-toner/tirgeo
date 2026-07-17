@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 
 const entry = z.object({ id: z.string().uuid().optional(), costCodeId: z.string().uuid().optional(), workDate: z.coerce.date(), startedAt: z.coerce.date(), finishedAt: z.coerce.date(), unpaidBreakMinutes: z.number().int().min(0).max(24 * 60).default(0), ordinaryMinutes: z.number().int().min(0).max(24 * 60), overtimeMinutes: z.number().int().min(0).max(24 * 60).default(0), allowanceCodes: z.array(z.string().min(1).max(50)).max(20).default([]), notes: z.string().max(2000).optional() }).refine(v => v.finishedAt > v.startedAt, "finish must be after start");
 const routes: FastifyPluginAsync = async app => {
-  app.get("/approvers", { preHandler: authed }, req => app.prisma.user.findMany({ where: { organisationId: req.auth.organisationId, active: true, id: { not: req.auth.userId }, role: { in: [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.FOREMAN] } }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }));
+  app.get("/approvers", { preHandler: authed }, req => app.prisma.user.findMany({ where: { organisationId: req.auth.organisationId, active: true, id: { not: req.auth.userId }, role: { in: [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN] } }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }));
   app.post("/", { preHandler: authed }, async (req, reply) => {
     const body = z.object({ projectId: z.string().uuid(), workerId: z.string().uuid(), weekEnding: z.coerce.date(), entries: z.array(entry).min(1) }).parse(req.body);
     const entries = body.entries.map(e => ({ ...e, id: e.id ?? randomUUID(), costCodeId: e.costCodeId ?? null, notes: e.notes ?? null }));
@@ -26,7 +26,7 @@ const routes: FastifyPluginAsync = async app => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const body = z.object({ approverUserId: z.string().uuid(), signedName: z.string().min(2), signature: z.string().min(1).max(500_000), signatureMethod: z.enum(["DRAWN", "TYPED"]), consent: z.literal(true) }).parse(req.body);
     const existing = await app.prisma.timesheet.findFirstOrThrow({ where: { id, status: Status.DRAFT, worker: { organisationId: req.auth.organisationId, userId: req.auth.userId } }, include: { entries: true } });
-    const approver = await app.prisma.user.findFirstOrThrow({ where: { id: body.approverUserId, organisationId: req.auth.organisationId, active: true, role: { in: [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.FOREMAN] } } });
+    const approver = await app.prisma.user.findFirstOrThrow({ where: { id: body.approverUserId, organisationId: req.auth.organisationId, active: true, role: { in: [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN] } } });
     if (approver.id === req.auth.userId) return reply.code(400).send({ error: "The employee and approver must be different users" });
     const signer = await app.prisma.user.findUniqueOrThrow({ where: { id: req.auth.userId } }); const contentHash = timesheetContentHash(existing);
     const [, result] = await app.prisma.$transaction([
@@ -37,7 +37,7 @@ const routes: FastifyPluginAsync = async app => {
     ]);
     return result;
   });
-  app.post("/:id/approve", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.FOREMAN) }, async req => {
+  app.post("/:id/approve", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN) }, async req => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const body = z.object({ signedName: z.string().min(2), signature: z.string().min(1).max(500_000), signatureMethod: z.enum(["DRAWN", "TYPED"]), consent: z.literal(true) }).parse(req.body);
     const existing = await app.prisma.timesheet.findFirstOrThrow({ where: { id, status: Status.SUBMITTED, project: { organisationId: req.auth.organisationId }, approvalRequest: { approverUserId: req.auth.userId, status: ApprovalRequestStatus.PENDING } }, include: { entries: true } });
@@ -53,7 +53,7 @@ const routes: FastifyPluginAsync = async app => {
   app.post("/:id/onsite-approve", { preHandler: authed, config: { rateLimit: { max: 5, timeWindow: "1 minute" } } }, async (req, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const body = z.object({ approverUserId: z.string().uuid(), pin: z.string().regex(/^\d{4}$/), signedName: z.string().min(2), signature: z.string().min(1).max(500_000), signatureMethod: z.enum(["DRAWN", "TYPED"]), consent: z.literal(true) }).parse(req.body);
-    const approver = await app.prisma.user.findFirstOrThrow({ where: { id: body.approverUserId, organisationId: req.auth.organisationId, active: true, role: { in: [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.FOREMAN] } } });
+    const approver = await app.prisma.user.findFirstOrThrow({ where: { id: body.approverUserId, organisationId: req.auth.organisationId, active: true, role: { in: [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN] } } });
     if (!approver.signaturePinHash) return reply.code(409).send({ error: "Supervisor must create a signing PIN after logging in" });
     if (approver.signaturePinLockedUntil && approver.signaturePinLockedUntil > new Date()) return reply.code(429).send({ error: "Supervisor signing PIN is temporarily locked" });
     if (!(await bcrypt.compare(body.pin, approver.signaturePinHash))) {
@@ -72,7 +72,7 @@ const routes: FastifyPluginAsync = async app => {
     ]);
     return result;
   });
-  app.post("/:id/reject", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.FOREMAN) }, async req => {
+  app.post("/:id/reject", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN) }, async req => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params); const { reason } = z.object({ reason: z.string().min(3) }).parse(req.body);
     const existing = await app.prisma.timesheet.findFirstOrThrow({ where: { id, status: Status.SUBMITTED, project: { organisationId: req.auth.organisationId }, approvalRequest: { approverUserId: req.auth.userId, status: ApprovalRequestStatus.PENDING } } });
     const [result] = await app.prisma.$transaction([

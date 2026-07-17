@@ -6,6 +6,8 @@ export type Role =
   | "ADMIN"
   | "PROJECT_MANAGER"
   | "SUPERVISOR"
+  | "SITE_SUPERVISOR"
+  | "SITE_ENGINEER"
   | "FOREMAN"
   | "SAFETY_MANAGER"
   | "PAYROLL"
@@ -80,6 +82,24 @@ export type AccountingProvider = "XERO" | "MYOB";
 export type PayrollExportStatus = "QUEUED" | "READY" | "SENDING" | "SENT" | "RECONCILED" | "FAILED";
 export type SignatureMethod = "DRAWN" | "TYPED";
 export type Jurisdiction = "ACT" | "NSW" | "NT" | "QLD" | "SA" | "TAS" | "VIC" | "WA";
+export type AccountSection =
+  | "DASHBOARD"
+  | "PROJECTS"
+  | "DAILY_REPORT"
+  | "HAZARDS"
+  | "OBSERVATIONS"
+  | "INSPECTIONS"
+  | "PERMITS"
+  | "CORRECTIVE_ACTIONS"
+  | "SAFETY_DOCUMENTS"
+  | "MY_SAFETY"
+  | "PLANT"
+  | "TIMESHEETS"
+  | "PAYROLL"
+  | "COMMERCIAL"
+  | "WORKER_DIRECTORY"
+  | "USER_ADMIN"
+  | "SETTINGS";
 export type SafetyDocumentType =
   | "SWMS"
   | "JSA"
@@ -93,6 +113,7 @@ export interface AuthUser {
   id: string;
   name: string;
   role: Role;
+  sections: AccountSection[];
   signaturePinRequired: boolean;
   worker?: WorkerSummary | null;
 }

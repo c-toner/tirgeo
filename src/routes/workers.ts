@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from "fastify";
+import { AccountSection } from "@prisma/client";
 import { z } from "zod";
 import { authed } from "../lib/access.js";
 
@@ -9,6 +10,7 @@ const routes: FastifyPluginAsync = async app => {
     const workers = await app.prisma.worker.findMany({
       where: {
         organisationId: req.auth.organisationId,
+        userId: req.auth.sections.includes(AccountSection.WORKER_DIRECTORY) ? undefined : req.auth.userId,
         terminationDate: q.includeInactive ? undefined : null,
         OR: search
           ? [

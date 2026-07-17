@@ -12,6 +12,8 @@ enum Role {
   ADMIN
   PROJECT_MANAGER
   SUPERVISOR
+  SITE_SUPERVISOR
+  SITE_ENGINEER
   FOREMAN
   SAFETY_MANAGER
   PAYROLL
@@ -160,6 +162,26 @@ enum FileAccess {
   PUBLIC
 }
 
+enum AccountSection {
+  DASHBOARD
+  PROJECTS
+  DAILY_REPORT
+  HAZARDS
+  OBSERVATIONS
+  INSPECTIONS
+  PERMITS
+  CORRECTIVE_ACTIONS
+  SAFETY_DOCUMENTS
+  MY_SAFETY
+  PLANT
+  TIMESHEETS
+  PAYROLL
+  COMMERCIAL
+  WORKER_DIRECTORY
+  USER_ADMIN
+  SETTINGS
+}
+
 model Organisation {
   id                     String                  @id @default(uuid())
   name                   String
@@ -296,6 +318,8 @@ model User {
   email                      String
   passwordHash               String
   name                       String
+  phone                      String?
+  address                    Json?
   role                       Role
   active                     Boolean                    @default(true)
   createdAt                  DateTime                   @default(now())
@@ -305,10 +329,26 @@ model User {
   signaturePinLockedUntil    DateTime?
   organisation               Organisation               @relation(fields: [organisationId], references: [id])
   worker                     Worker?
+  sectionAccess              UserSectionAccess[]        @relation("UserSectionAccessUser")
+  grantedSectionAccess       UserSectionAccess[]        @relation("UserSectionAccessGrantedBy")
   timesheetApprovalRequests  TimesheetApprovalRequest[] @relation("TimesheetApprover")
   notifications              Notification[]
 
   @@unique([organisationId, email])
+}
+
+model UserSectionAccess {
+  id          String         @id @default(uuid())
+  userId      String
+  section     AccountSection
+  enabled     Boolean
+  grantedById String?
+  updatedAt   DateTime       @updatedAt
+  user        User           @relation("UserSectionAccessUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy   User?          @relation("UserSectionAccessGrantedBy", fields: [grantedById], references: [id])
+
+  @@unique([userId, section])
+  @@index([section, enabled])
 }
 
 model Worker {

@@ -19,6 +19,28 @@ import { PayrollPage } from "./pages/payroll/PayrollPage.tsx";
 import { CommercialPage } from "./pages/commercial/CommercialPage.tsx";
 import { TenderDetailPage } from "./pages/commercial/TenderDetailPage.tsx";
 import { SettingsPage } from "./pages/SettingsPage.tsx";
+import type { AccountSection } from "./lib/types.ts";
+
+const ROUTE_SECTIONS: Array<[string, AccountSection]> = [
+  ["/projects", "PROJECTS"],
+  ["/field/daily-report", "DAILY_REPORT"],
+  ["/hseq/hazards", "HAZARDS"],
+  ["/hseq/observations", "OBSERVATIONS"],
+  ["/hseq/inspections", "INSPECTIONS"],
+  ["/hseq/permits", "PERMITS"],
+  ["/hseq/actions", "CORRECTIVE_ACTIONS"],
+  ["/hseq/documents", "SAFETY_DOCUMENTS"],
+  ["/hseq/my-safety", "MY_SAFETY"],
+  ["/plant", "PLANT"],
+  ["/timesheets", "TIMESHEETS"],
+  ["/payroll", "PAYROLL"],
+  ["/commercial", "COMMERCIAL"],
+  ["/settings", "SETTINGS"],
+];
+
+function routeSection(path: string): AccountSection {
+  return ROUTE_SECTIONS.find(([prefix]) => path === prefix || path.startsWith(`${prefix}/`))?.[1] ?? "DASHBOARD";
+}
 
 function Routes() {
   const { user } = useAuth();
@@ -27,6 +49,7 @@ function Routes() {
 
   if (!user) return <LoginPage />;
   if (clean === "/login") return <LoginPage />;
+  if (!user.sections.includes(routeSection(clean))) return <DashboardPage />;
 
   const tenderMatch = matchPath("/commercial/tenders/:id", clean);
   if (tenderMatch) return <TenderDetailPage tenderId={tenderMatch.id} />;

@@ -42,7 +42,7 @@ const routes: FastifyPluginAsync = async app => {
       orderBy: { capturedAt: "desc" },
     });
   });
-  app.post("/:id/telemetry", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR) }, async (req, reply) => {
+  app.post("/:id/telemetry", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.SITE_ENGINEER) }, async (req, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const plant = await app.prisma.plant.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId } });
     const body = plantTelemetryReading.parse(req.body);

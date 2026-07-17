@@ -1,11 +1,11 @@
 import type { FastifyPluginAsync } from "fastify";
-import { AccountingProvider, PayrollExportStatus, Role, Status } from "@prisma/client";
+import { AccountingProvider, AccountSection, PayrollExportStatus, Role, Status } from "@prisma/client";
 import { z } from "zod";
-import { allow } from "../lib/access.js";
+import { allowRolesWithSection } from "../lib/access.js";
 import { audit } from "../lib/audit.js";
 import { buildProviderPayload, canTransitionPayrollExport } from "../lib/payroll.js";
 
-const payrollManagers = allow(Role.OWNER, Role.ADMIN, Role.PAYROLL);
+const payrollManagers = allowRolesWithSection(AccountSection.PAYROLL, Role.OWNER, Role.ADMIN, Role.PAYROLL);
 
 const routes: FastifyPluginAsync = async app => {
   app.put("/connections/:provider", { preHandler: payrollManagers }, async (req, reply) => {

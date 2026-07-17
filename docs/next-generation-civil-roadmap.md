@@ -4,6 +4,18 @@ This roadmap turns the market research into TirGeo backend capabilities. The pro
 
 The current product is a web app, but the API should be designed as a mobile-ready contract from the start. Future Android and iOS clients need the same domain model, with offline sync, device-generated UUIDs, small field payloads, resumable uploads, idempotent mutations and conflict rules for diaries, timecards, dockets, photos, signatures and telemetry.
 
+## Field Adoption Principles
+
+Everyday construction workers are the harshest and most important usability test. Field workflows must assume gloves, dirty hands, bright sun, weak reception, fatigue and low patience for admin.
+
+- Put crew users into a separate field-first home screen with only the actions they need today.
+- Keep primary actions as large touch targets with plain labels: pre-start, timecard, sign-on, hazard, permit and my details.
+- Avoid dense tables for basic workers. Use one clear action per row/card and defer back-office detail to supervisor/admin screens.
+- Prefer capture-first flows: photo, voice, GPS, machine selection and signature before manual typing.
+- Allow workers to complete core safety and time workflows within two taps from the home screen whenever data is already known.
+- Keep admin/payroll/commercial sections invisible to basic workers unless deliberately granted.
+- Design for offline retries and idempotent submissions so field crews are not punished for poor signal.
+
 ## 1. Civil Field Operations
 
 Foundation now in backend:
@@ -16,6 +28,7 @@ Foundation now in backend:
 
 Next work:
 
+- Create a worker project/machine assignment model so operator views, permits, SWMS and pre-start prompts can be filtered by current and previous jobs.
 - Add OCR extraction jobs for quarry, asphalt and concrete dockets.
 - Add Caterpillar, Komatsu and mixed telematics connector adapters.
 - Reconcile plant telemetry against pre-starts, plant time in daily reports and plant hire cost rules.
@@ -30,6 +43,7 @@ Foundation now in backend:
 
 Next work:
 
+- Expand the web crew home into a mobile offline "field command" screen with today-only work, active machine, current project zone and pending sign-offs.
 - Add mobile voice-to-diary parsing into personnel, plant, activities, delays and production actuals.
 - Add HSEQ rule matching by project zone, chainage range, plant type and worker competency.
 - Add a field command endpoint that returns the smallest relevant action set for the current worker context.
@@ -70,3 +84,11 @@ Next work:
 - Add forecast rollups that update from approved field quantities.
 - Add client progress claim views backed by the same production actuals.
 - Add safety/productivity dashboards using shared project, location and plant context.
+
+## Delivery Sequence
+
+1. Harden crew adoption: two-click home, large tap targets, section-scoped navigation, offline-safe mutation receipts and fast sign/pre-start/timecard flows.
+2. Add assignment context: worker-to-project, worker-to-machine, permit-to-work-party and chainage/zone scoping.
+3. Automate field capture: docket OCR, voice diary parsing, geofence clock events and telematics reconciliation.
+4. Close the commercial loop: production actuals into tender rate libraries, plant/fuel/labour costs into estimating and progress claims from approved quantities.
+5. Build executive fabric: unified reporting that updates cost, safety, productivity and claims from the same approved operational events.

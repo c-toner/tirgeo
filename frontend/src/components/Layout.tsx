@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useAuth, PROJECT_LEADERS, PAYROLL_MANAGERS } from "../lib/auth.tsx";
+import { useAuth } from "../lib/auth.tsx";
 import { Link, usePath } from "../lib/router.tsx";
 import { useApiQuery, invalidate } from "../lib/useApi.ts";
 import { api } from "../lib/api.ts";
-import type { AppNotification, Role } from "../lib/types.ts";
+import type { AccountSection, AppNotification } from "../lib/types.ts";
 import { Icon, useToast } from "./ui.tsx";
 import { formatDateTime } from "../lib/format.ts";
 
@@ -12,7 +12,7 @@ interface NavEntry {
   to: string;
   label: string;
   icon: string;
-  roles?: Role[];
+  section?: AccountSection;
 }
 
 interface NavGroup {
@@ -24,50 +24,50 @@ const NAV: NavGroup[] = [
   {
     title: "Operate",
     items: [
-      { to: "/", label: "Dashboard", icon: "dashboard" },
-      { to: "/projects", label: "Projects", icon: "projects" },
-      { to: "/field/daily-report", label: "Daily diary", icon: "clipboard" },
+      { to: "/", label: "Dashboard", icon: "dashboard", section: "DASHBOARD" },
+      { to: "/projects", label: "Projects", icon: "projects", section: "PROJECTS" },
+      { to: "/field/daily-report", label: "Daily diary", icon: "clipboard", section: "DAILY_REPORT" },
     ],
   },
   {
     title: "HSEQ",
     items: [
-      { to: "/hseq/hazards", label: "Hazard register", icon: "alert" },
-      { to: "/hseq/observations", label: "Observations", icon: "search" },
-      { to: "/hseq/inspections", label: "Inspections", icon: "check" },
-      { to: "/hseq/permits", label: "Permits to work", icon: "file" },
-      { to: "/hseq/actions", label: "Corrective actions", icon: "clipboard" },
-      { to: "/hseq/documents", label: "Safety documents", icon: "shield" },
-      { to: "/hseq/my-safety", label: "My sign-ons", icon: "pen" },
+      { to: "/hseq/hazards", label: "Hazard register", icon: "alert", section: "HAZARDS" },
+      { to: "/hseq/observations", label: "Observations", icon: "search", section: "OBSERVATIONS" },
+      { to: "/hseq/inspections", label: "Inspections", icon: "check", section: "INSPECTIONS" },
+      { to: "/hseq/permits", label: "Permits to work", icon: "file", section: "PERMITS" },
+      { to: "/hseq/actions", label: "Corrective actions", icon: "clipboard", section: "CORRECTIVE_ACTIONS" },
+      { to: "/hseq/documents", label: "Safety documents", icon: "shield", section: "SAFETY_DOCUMENTS" },
+      { to: "/hseq/my-safety", label: "My sign-ons", icon: "pen", section: "MY_SAFETY" },
     ],
   },
   {
     title: "Resources",
     items: [
-      { to: "/plant", label: "Plant & pre-starts", icon: "truck" },
-      { to: "/timesheets", label: "Timesheets", icon: "clock" },
+      { to: "/plant", label: "Plant & pre-starts", icon: "truck", section: "PLANT" },
+      { to: "/timesheets", label: "Timesheets", icon: "clock", section: "TIMESHEETS" },
       {
         to: "/payroll",
         label: "Payroll export",
         icon: "dollars",
-        roles: PAYROLL_MANAGERS,
+        section: "PAYROLL",
       },
     ],
   },
   {
     title: "Commercial",
     items: [
-      { to: "/commercial", label: "Tenders & claims", icon: "briefcase", roles: PROJECT_LEADERS },
+      { to: "/commercial", label: "Tenders & claims", icon: "briefcase", section: "COMMERCIAL" },
     ],
   },
 ];
 
 const MOBILE_NAV: NavEntry[] = [
-  { to: "/", label: "Home", icon: "dashboard" },
-  { to: "/field/daily-report", label: "Diary", icon: "clipboard" },
-  { to: "/hseq/observations", label: "HSEQ", icon: "shield" },
-  { to: "/plant", label: "Plant", icon: "truck" },
-  { to: "/timesheets", label: "Time", icon: "clock" },
+  { to: "/", label: "Home", icon: "dashboard", section: "DASHBOARD" },
+  { to: "/field/daily-report", label: "Diary", icon: "clipboard", section: "DAILY_REPORT" },
+  { to: "/hseq/observations", label: "HSEQ", icon: "shield", section: "OBSERVATIONS" },
+  { to: "/plant", label: "Plant", icon: "truck", section: "PLANT" },
+  { to: "/timesheets", label: "Time", icon: "clock", section: "TIMESHEETS" },
 ];
 
 function useTheme(): [string, () => void] {
@@ -151,7 +151,7 @@ function NotificationsDrawer({ onClose }: { onClose: () => void }) {
 }
 
 export function Layout({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) {
-  const { user, logout, hasRole } = useAuth();
+  const { user, logout } = useAuth();
   const path = usePath();
   const [theme, toggleTheme] = useTheme();
   const [notifOpen, setNotifOpen] = useState(false);
@@ -169,7 +169,7 @@ export function Layout({ title, children, actions }: { title: string; children: 
 
   const visibleGroups = NAV.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.roles || (user && item.roles.includes(user.role))),
+    items: group.items.filter((item) => !item.section || user?.sections.includes(item.section)),
   })).filter((group) => group.items.length > 0);
 
   const isActive = (to: string) => (to === "/" ? path === "/" : path.startsWith(to));
@@ -266,7 +266,7 @@ export function Layout({ title, children, actions }: { title: string; children: 
       </main>
 
       <nav className="mobile-nav" aria-label="Primary">
-        {MOBILE_NAV.filter((item) => !item.roles || hasRole(...item.roles)).map((item) => (
+        {MOBILE_NAV.filter((item) => !item.section || user?.sections.includes(item.section)).map((item) => (
           <Link key={item.to} to={item.to} className={isActive(item.to) ? "active" : ""}>
             <Icon name={item.icon} size={19} />
             {item.label}

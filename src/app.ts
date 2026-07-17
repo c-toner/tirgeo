@@ -23,6 +23,7 @@ import payrollRoutes from "./routes/payroll.js";
 import notificationRoutes from "./routes/notifications.js";
 import fileRoutes from "./routes/files.js";
 import workerRoutes from "./routes/workers.js";
+import accountRoutes from "./routes/account.js";
 import { Prisma } from "@prisma/client";
 import { config, corsOrigins } from "./config.js";
 
@@ -50,7 +51,7 @@ async function fileExists(filePath: string) {
 }
 
 export async function buildApp() {
-  const app = Fastify({ logger: { redact: ["req.headers.authorization", "body.password", "body.pin", "body.currentPin", "body.payrollDetailsEncrypted"] }, trustProxy: config.TRUST_PROXY });
+  const app = Fastify({ logger: { redact: ["req.headers.authorization", "body.password", "body.pin", "body.currentPin", "body.payrollDetails", "body.payrollDetailsEncrypted"] }, trustProxy: config.TRUST_PROXY });
   await app.register(helmet);
   await app.register(cors, { origin: corsOrigins.length ? corsOrigins : false });
   await app.register(rateLimit, { max: 200, timeWindow: "1 minute" });
@@ -75,6 +76,7 @@ export async function buildApp() {
   await app.register(notificationRoutes, { prefix: "/api/v1/notifications" });
   await app.register(fileRoutes, { prefix: "/api/v1/files" });
   await app.register(workerRoutes, { prefix: "/api/v1/workers" });
+  await app.register(accountRoutes, { prefix: "/api/v1/account" });
   app.get("/*", async (req, reply) => {
     const requestPath = new URL(req.raw.url ?? "/", "http://localhost").pathname;
     if (requestPath.startsWith("/api/")) return reply.code(404).send({ error: "Route not found", code: "NOT_FOUND" });
