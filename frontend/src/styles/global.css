@@ -597,6 +597,11 @@ table.table {
 
 .table tbody tr:last-child td { border-bottom: none; }
 .table tbody tr:hover { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
+.table tbody tr.clickable-row { cursor: pointer; }
+.table tbody tr.clickable-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
+}
 .table .num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ---------- Tabs & filters ---------- */
@@ -683,6 +688,68 @@ table.table {
 
 @keyframes fade-in { from { opacity: 0; } }
 @keyframes pop-in { from { opacity: 0; transform: scale(0.97) translateY(6px); } }
+
+.hazard-summary-head {
+  padding-bottom: 2px;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface-2) 38%, transparent);
+}
+
+.summary-item span:first-child {
+  color: var(--ink-3);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.summary-item b {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.summary-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.summary-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.summary-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: start;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface-2) 22%, transparent);
+}
+
+.summary-list-item:last-child { border-bottom: none; }
 
 /* ---------- Toasts ---------- */
 
@@ -881,6 +948,7 @@ table.table {
 @media (max-width: 960px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { display: none; }
+  .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
   .mobile-topbar {
     display: flex;
@@ -977,6 +1045,8 @@ table.table {
   .mobile-topbar-title { font-size: 16px; }
   .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .stat-tile .stat-value { font-size: 24px; }
+  .summary-grid { grid-template-columns: 1fr; }
+  .summary-list-item { grid-template-columns: 1fr; }
 }
 
 @media print {

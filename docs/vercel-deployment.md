@@ -53,7 +53,7 @@ VITE_API_BASE_URL=
 Notes:
 
 - `JWT_SECRET` must be changed from any local placeholder.
-- Prisma expects `DATABASE_URL`. If a Vercel/Neon integration created `POSTGRES_PRISMA_URL`, `POSTGRES_URL_NON_POOLING`, or `POSTGRES_URL`, either copy that value into `DATABASE_URL` or rely on the app's runtime fallback. Migrations still work best when `DATABASE_URL` is explicitly set.
+- Prisma migrations expect `DATABASE_URL`. If a Vercel/Neon integration created `POSTGRES_PRISMA_URL`, `POSTGRES_URL_NON_POOLING`, or `POSTGRES_URL`, copy the production database connection string into `DATABASE_URL` for the project environment. The app runtime has fallback support for provider-specific names, but Prisma CLI reads only `prisma/schema.prisma` and environment variables.
 - `CORS_ORIGINS` can stay blank for the one-project same-origin deployment. Set it only if another frontend domain will call this API.
 - `VITE_API_BASE_URL` can stay blank for the one-project same-origin deployment. Set it only if the frontend should call a separate API origin.
 - Vercel's filesystem is ephemeral. `/tmp` is acceptable for temporary processing, but not durable file storage.

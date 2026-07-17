@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { ReactNode } from "react";
 import { Layout } from "../../components/Layout.tsx";
 import { ProjectSelect, useProjectName } from "../../components/ProjectSelect.tsx";
 import {
@@ -353,10 +354,165 @@ function VerifyControlModal({ control, onClose }: { control: ControlMeasure; onC
   );
 }
 
-function HazardRow({ hazard, canEdit, onStatus, onAddControl }: { hazard: Hazard; canEdit: boolean; onStatus: () => void; onAddControl: () => void }) {
+function SummaryItem({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="summary-item">
+      <span>{label}</span>
+      <b>{children}</b>
+    </div>
+  );
+}
+
+function HazardSummaryModal({
+  hazard,
+  canEdit,
+  onClose,
+  onStatus,
+  onAddControl,
+}: {
+  hazard: Hazard;
+  canEdit: boolean;
+  onClose: () => void;
+  onStatus: () => void;
+  onAddControl: () => void;
+}) {
+  const projectName = useProjectName(hazard.projectId);
+  const openActions = hazard.correctiveActions?.filter((action) => !["CLOSED", "CANCELLED"].includes(action.status)) ?? [];
+  const overdueControls = hazard.controls?.filter((control) => isOverdue(control.reviewDueAt) && !control.verifiedAt) ?? [];
+
+  return (
+    <Modal
+      title={hazard.title}
+      large
+      onClose={onClose}
+      footer={
+        canEdit ? (
+          <>
+            <button className="btn btn-ghost" onClick={onStatus}>
+              Update status
+            </button>
+            <button className="btn btn-primary" onClick={onAddControl}>
+              <Icon name="plus" size={15} /> Add control
+            </button>
+          </>
+        ) : undefined
+      }
+    >
+      <div className="hazard-summary-head">
+        <div className="stack" style={{ gap: 8 }}>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <StatusBadge status={hazard.status} />
+            <RiskBadge level={hazard.riskLevel} />
+            {hazard.residualRiskLevel && <RiskBadge level={hazard.residualRiskLevel} />}
+          </div>
+          <p>{hazard.description}</p>
+        </div>
+      </div>
+
+      <div className="summary-grid">
+        <SummaryItem label="Project">{projectName}</SummaryItem>
+        <SummaryItem label="Domain">{titleCase(hazard.domain)}</SummaryItem>
+        <SummaryItem label="Activity">{hazard.activity || "—"}</SummaryItem>
+        <SummaryItem label="Location">{hazard.location || "—"}</SummaryItem>
+        <SummaryItem label="Identified">{formatDate(hazard.identifiedAt)}</SummaryItem>
+        <SummaryItem label="Review due">
+          <span className={isOverdue(hazard.reviewDueAt) ? "field-error" : ""}>{formatDate(hazard.reviewDueAt)}</span>
+        </SummaryItem>
+        <SummaryItem label="Controls">{hazard.controls?.length ?? 0}</SummaryItem>
+        <SummaryItem label="Open actions">{openActions.length}</SummaryItem>
+      </div>
+
+      {hazard.legalReference && (
+        <div className="summary-section">
+          <h3>Legal reference</h3>
+          <p className="muted">{hazard.legalReference}</p>
+        </div>
+      )}
+
+      <div className="summary-section">
+        <div className="row-between">
+          <h3>Controls</h3>
+          {overdueControls.length > 0 && <span className="badge badge-warning">{overdueControls.length} due</span>}
+        </div>
+        {hazard.controls?.length ? (
+          <div className="summary-list">
+            {hazard.controls.map((control) => (
+              <div key={control.id} className="summary-list-item">
+                <div>
+                  <b>{control.title}</b>
+                  <div className="tiny">
+                    {titleCase(control.type)}
+                    {control.verificationMethod ? ` · ${control.verificationMethod}` : ""}
+                  </div>
+                  <p className="muted">{control.description}</p>
+                </div>
+                <div className="tiny" style={{ textAlign: "right" }}>
+                  {control.verifiedAt ? (
+                    <span className="badge badge-good">Verified {formatDate(control.verifiedAt)}</span>
+                  ) : (
+                    <span className={isOverdue(control.reviewDueAt) ? "field-error" : ""}>{formatDate(control.reviewDueAt)}</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No controls recorded yet.</p>
+        )}
+      </div>
+
+      <div className="summary-section">
+        <h3>Corrective actions</h3>
+        {hazard.correctiveActions?.length ? (
+          <div className="summary-list">
+            {hazard.correctiveActions.map((action) => (
+              <div key={action.id} className="summary-list-item">
+                <div>
+                  <b>{action.description}</b>
+                  <div className="tiny">
+                    Priority {titleCase(action.priority)}
+                    {action.dueAt ? ` · Due ${formatDate(action.dueAt)}` : ""}
+                  </div>
+                </div>
+                <StatusBadge status={action.status} />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted">No corrective actions linked.</p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function HazardRow({
+  hazard,
+  canEdit,
+  onOpen,
+  onStatus,
+  onAddControl,
+}: {
+  hazard: Hazard;
+  canEdit: boolean;
+  onOpen: () => void;
+  onStatus: () => void;
+  onAddControl: () => void;
+}) {
   const projectName = useProjectName(hazard.projectId);
   return (
-    <tr>
+    <tr
+      className="clickable-row"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      aria-label={`Open hazard details for ${hazard.title}`}
+    >
       <td>
         <b>{hazard.title}</b>
         <div className="tiny">
@@ -380,10 +536,22 @@ function HazardRow({ hazard, canEdit, onStatus, onAddControl }: { hazard: Hazard
       {canEdit && (
         <td>
           <div className="row" style={{ gap: 6, flexWrap: "nowrap" }}>
-            <button className="btn btn-ghost btn-sm" onClick={onStatus}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                onStatus();
+              }}
+            >
               Update
             </button>
-            <button className="btn btn-ghost btn-sm" onClick={onAddControl}>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={(event) => {
+                event.stopPropagation();
+                onAddControl();
+              }}
+            >
               + Control
             </button>
           </div>
@@ -418,6 +586,7 @@ export function HazardsPage() {
   });
 
   const [creating, setCreating] = useState(false);
+  const [viewing, setViewing] = useState<Hazard | null>(null);
   const [statusFor, setStatusFor] = useState<Hazard | null>(null);
   const [controlFor, setControlFor] = useState<Hazard | null>(null);
   const [verifying, setVerifying] = useState<ControlMeasure | null>(null);
@@ -494,6 +663,7 @@ export function HazardsPage() {
                       key={hazard.id}
                       hazard={hazard}
                       canEdit={canEdit}
+                      onOpen={() => setViewing(hazard)}
                       onStatus={() => setStatusFor(hazard)}
                       onAddControl={() => setControlFor(hazard)}
                     />
@@ -565,6 +735,21 @@ export function HazardsPage() {
       )}
 
       {creating && <CreateHazardModal onClose={() => setCreating(false)} />}
+      {viewing && (
+        <HazardSummaryModal
+          hazard={viewing}
+          canEdit={canEdit}
+          onClose={() => setViewing(null)}
+          onStatus={() => {
+            setStatusFor(viewing);
+            setViewing(null);
+          }}
+          onAddControl={() => {
+            setControlFor(viewing);
+            setViewing(null);
+          }}
+        />
+      )}
       {statusFor && <HazardStatusModal hazard={statusFor} onClose={() => setStatusFor(null)} />}
       {controlFor && <AddControlModal hazard={controlFor} onClose={() => setControlFor(null)} />}
       {verifying && <VerifyControlModal control={verifying} onClose={() => setVerifying(null)} />}
