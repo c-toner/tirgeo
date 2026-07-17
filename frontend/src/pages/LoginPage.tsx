@@ -49,9 +49,9 @@ export function LoginPage() {
             label="Organisation"
             required
             error={fieldErrors["organisation"]}
-            hint="Use your company name or login slug, for example Progress Civil."
+            hint="Use your company name"
           >
-            <TextInput value={organisation} onChange={setOrganisation} placeholder="Progress Civil" autoComplete="organization" />
+            <TextInput value={organisation} onChange={setOrganisation} placeholder="Tirgeo Civil" autoComplete="organization" />
           </Field>
           <Field label="Email" required error={fieldErrors["email"]}>
             <TextInput value={email} onChange={setEmail} type="email" placeholder="you@company.com.au" autoComplete="username" inputMode="email" />

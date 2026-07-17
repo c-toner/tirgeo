@@ -1,6 +1,17 @@
 import { z } from "zod";
 
-process.env.DATABASE_URL ??= process.env.POSTGRES_PRISMA_URL ?? process.env.POSTGRES_URL_NON_POOLING ?? process.env.POSTGRES_URL;
+process.env.DATABASE_URL ??=
+  process.env.POSTGRES_PRISMA_URL ??
+  process.env.POSTGRES_URL ??
+  process.env.tirgeo_db_prod_POSTGRES_PRISMA_URL ??
+  process.env.tirgeo_db_prod_POSTGRES_URL ??
+  process.env.tirgeo_db_prod_DATABASE_URL;
+
+process.env.DIRECT_URL ??=
+  process.env.POSTGRES_URL_NON_POOLING ??
+  process.env.DATABASE_URL_UNPOOLED ??
+  process.env.tirgeo_db_prod_POSTGRES_URL_NON_POOLING ??
+  process.env.tirgeo_db_prod_DATABASE_URL_UNPOOLED;
 
 export const config = z.object({
   DATABASE_URL: z.string().url(),

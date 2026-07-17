@@ -3,6 +3,7 @@ import { InspectionResult, Role } from "@prisma/client";
 import { z } from "zod";
 import { allow, authed, requireOrganisationProject } from "../lib/access.js";
 import { audit, auditData } from "../lib/audit.js";
+import { plantTelemetryReading } from "../lib/civil.js";
 import { defectQuestionIds, preStartSections, validatePreStartAnswers } from "../lib/prestart.js";
 
 const routes: FastifyPluginAsync = async app => {
@@ -31,6 +32,29 @@ const routes: FastifyPluginAsync = async app => {
     const body = z.object({ assetNumber: z.string(), type: z.string(), make: z.string().optional(), model: z.string().optional(), serialNumber: z.string().optional(), registration: z.string().optional(), nextServiceAt: z.coerce.date().optional(), nextServiceHours: z.number().optional() }).parse(req.body);
     const plant = await app.prisma.plant.create({ data: { ...body, organisationId: req.auth.organisationId } });
     await audit(app, req, "CREATE", "Plant", plant.id, plant); return reply.code(201).send(plant);
+  });
+  app.get("/:id/telemetry", { preHandler: authed }, async req => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const q = z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional(), source: z.string().optional() }).parse(req.query);
+    await app.prisma.plant.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId } });
+    return app.prisma.plantTelemetryReading.findMany({
+      where: { plantId: id, source: q.source, capturedAt: { gte: q.from, lte: q.to } },
+      orderBy: { capturedAt: "desc" },
+    });
+  });
+  app.post("/:id/telemetry", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR) }, async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const plant = await app.prisma.plant.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId } });
+    const body = plantTelemetryReading.parse(req.body);
+    if (body.projectId) await requireOrganisationProject(app, req, body.projectId);
+    if (body.engineHours !== undefined && plant.hourMeter !== null && body.engineHours < Number(plant.hourMeter)) return reply.code(409).send({ error: "Engine hours cannot move backwards" });
+    if (body.odometerKm !== undefined && plant.odometerKm !== null && body.odometerKm < plant.odometerKm) return reply.code(409).send({ error: "Odometer cannot move backwards" });
+    const [reading] = await app.prisma.$transaction([
+      app.prisma.plantTelemetryReading.create({ data: { ...body, plantId: id, organisationId: req.auth.organisationId } }),
+      app.prisma.plant.update({ where: { id }, data: { hourMeter: body.engineHours ?? undefined, odometerKm: body.odometerKm ?? undefined } }),
+    ]);
+    await audit(app, req, "TELEMETRY", "Plant", id, { readingId: reading.id, source: reading.source, capturedAt: reading.capturedAt });
+    return reply.code(201).send(reading);
   });
   app.post("/:id/pre-starts", { preHandler: authed }, async (req, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);

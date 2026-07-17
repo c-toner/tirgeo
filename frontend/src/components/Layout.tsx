@@ -236,8 +236,8 @@ export function Layout({ title, children, actions }: { title: string; children: 
         <button className="btn-icon" style={{ color: "inherit" }} onClick={() => setMobileMenu(true)} aria-label="Open menu">
           <Icon name="menu" size={20} />
         </button>
-        <span className="logo-mark" style={{ width: 26, height: 26, fontSize: 14 }}>T</span>
-        <b style={{ flex: 1 }}>{title}</b>
+        <span className="logo-mark mobile-topbar-logo">T</span>
+        <b className="mobile-topbar-title">{title}</b>
         <button className="btn-icon" style={{ color: "inherit", position: "relative" }} onClick={() => setNotifOpen(true)} aria-label="Notifications">
           <Icon name="bell" size={18} />
           {unread > 0 && <span className="unread-dot" />}

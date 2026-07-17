@@ -3,8 +3,9 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -161,29 +162,30 @@ enum FileAccess {
 }
 
 model Organisation {
-  id                    String                 @id @default(uuid())
-  name                  String
-  slug                  String                 @unique
-  abn                   String?                @unique
-  timezone              String                 @default("Australia/Sydney")
-  createdAt             DateTime               @default(now())
-  users                 User[]
-  projects              Project[]
-  workers               Worker[]
-  plant                 Plant[]
-  tenders               Tender[]
-  auditEvents           AuditEvent[]
-  devices               Device[]
-  mutationReceipts      MutationReceipt[]
-  accountingConnections AccountingConnection[]
-  payrollExports        PayrollExport[]
-  preStartTemplates     PreStartTemplate[]
-  hazards               HazardRegisterItem[]
-  controlMeasures       ControlMeasure[]
-  hseqInspections       HseqInspection[]
-  safetyObservations    SafetyObservation[]
-  permitsToWork         PermitToWork[]
-  fileAssets            FileAsset[]
+  id                     String                  @id @default(uuid())
+  name                   String
+  slug                   String                  @unique
+  abn                    String?                 @unique
+  timezone               String                  @default("Australia/Sydney")
+  createdAt              DateTime                @default(now())
+  users                  User[]
+  projects               Project[]
+  workers                Worker[]
+  plant                  Plant[]
+  plantTelemetryReadings PlantTelemetryReading[]
+  tenders                Tender[]
+  auditEvents            AuditEvent[]
+  devices                Device[]
+  mutationReceipts       MutationReceipt[]
+  accountingConnections  AccountingConnection[]
+  payrollExports         PayrollExport[]
+  preStartTemplates      PreStartTemplate[]
+  hazards                HazardRegisterItem[]
+  controlMeasures        ControlMeasure[]
+  hseqInspections        HseqInspection[]
+  safetyObservations     SafetyObservation[]
+  permitsToWork          PermitToWork[]
+  fileAssets             FileAsset[]
 }
 
 model AccountingConnection {
@@ -355,51 +357,56 @@ model Competency {
 }
 
 model Project {
-  id                 String               @id @default(uuid())
-  organisationId     String
-  code               String
-  name               String
-  clientName         String?
-  description        String?
-  status             ProjectStatus        @default(TENDER)
-  jurisdiction       String
-  address            String?
-  latitude           Decimal?             @db.Decimal(10, 7)
-  longitude          Decimal?             @db.Decimal(10, 7)
-  contractValue      Decimal?             @db.Decimal(16, 2)
-  startDate          DateTime?
-  endDate            DateTime?
-  organisation       Organisation         @relation(fields: [organisationId], references: [id])
-  costCodes          CostCode[]
-  timesheets         Timesheet[]
-  dailyReports       DailyReport[]
-  safetyDocuments    SafetyDocument[]
-  incidents          Incident[]
-  progressClaims     ProgressClaim[]
-  variations         Variation[]
-  documents          Document[]
-  inductions         Induction[]
-  hazards            HazardRegisterItem[]
-  controlMeasures    ControlMeasure[]
-  hseqInspections    HseqInspection[]
-  safetyObservations SafetyObservation[]
-  permitsToWork      PermitToWork[]
-  correctiveActions  CorrectiveAction[]
-  fileAssets         FileAsset[]
+  id                     String                  @id @default(uuid())
+  organisationId         String
+  code                   String
+  name                   String
+  clientName             String?
+  description            String?
+  status                 ProjectStatus           @default(TENDER)
+  jurisdiction           String
+  address                String?
+  latitude               Decimal?                @db.Decimal(10, 7)
+  longitude              Decimal?                @db.Decimal(10, 7)
+  alignment              Json?
+  geofence               Json?
+  contractValue          Decimal?                @db.Decimal(16, 2)
+  startDate              DateTime?
+  endDate                DateTime?
+  organisation           Organisation            @relation(fields: [organisationId], references: [id])
+  costCodes              CostCode[]
+  timesheets             Timesheet[]
+  dailyReports           DailyReport[]
+  safetyDocuments        SafetyDocument[]
+  incidents              Incident[]
+  progressClaims         ProgressClaim[]
+  variations             Variation[]
+  documents              Document[]
+  inductions             Induction[]
+  hazards                HazardRegisterItem[]
+  controlMeasures        ControlMeasure[]
+  hseqInspections        HseqInspection[]
+  safetyObservations     SafetyObservation[]
+  permitsToWork          PermitToWork[]
+  correctiveActions      CorrectiveAction[]
+  fileAssets             FileAsset[]
+  productionActuals      ProductionActual[]
+  plantTelemetryReadings PlantTelemetryReading[]
 
   @@unique([organisationId, code])
 }
 
 model CostCode {
-  id              String      @id @default(uuid())
-  projectId       String
-  code            String
-  description     String
-  budgetLabour    Decimal     @default(0) @db.Decimal(14, 2)
-  budgetPlant     Decimal     @default(0) @db.Decimal(14, 2)
-  budgetMaterials Decimal     @default(0) @db.Decimal(14, 2)
-  project         Project     @relation(fields: [projectId], references: [id])
-  entries         TimeEntry[]
+  id                String             @id @default(uuid())
+  projectId         String
+  code              String
+  description       String
+  budgetLabour      Decimal            @default(0) @db.Decimal(14, 2)
+  budgetPlant       Decimal            @default(0) @db.Decimal(14, 2)
+  budgetMaterials   Decimal            @default(0) @db.Decimal(14, 2)
+  project           Project            @relation(fields: [projectId], references: [id])
+  entries           TimeEntry[]
+  productionActuals ProductionActual[]
 
   @@unique([projectId, code])
 }
@@ -511,22 +518,23 @@ model PayRun {
 }
 
 model Plant {
-  id               String           @id @default(uuid())
-  organisationId   String
-  assetNumber      String
-  type             String
-  make             String?
-  model            String?
-  serialNumber     String?
-  registration     String?
-  hourMeter        Decimal?         @db.Decimal(12, 1)
-  odometerKm       Int?
-  status           String           @default("AVAILABLE")
-  nextServiceAt    DateTime?
-  nextServiceHours Decimal?         @db.Decimal(12, 1)
-  organisation     Organisation     @relation(fields: [organisationId], references: [id])
-  preStarts        PlantPreStart[]
-  clearances       PlantClearance[]
+  id                String                  @id @default(uuid())
+  organisationId    String
+  assetNumber       String
+  type              String
+  make              String?
+  model             String?
+  serialNumber      String?
+  registration      String?
+  hourMeter         Decimal?                @db.Decimal(12, 1)
+  odometerKm        Int?
+  status            String                  @default("AVAILABLE")
+  nextServiceAt     DateTime?
+  nextServiceHours  Decimal?                @db.Decimal(12, 1)
+  organisation      Organisation            @relation(fields: [organisationId], references: [id])
+  preStarts         PlantPreStart[]
+  clearances        PlantClearance[]
+  telemetryReadings PlantTelemetryReading[]
 
   @@unique([organisationId, assetNumber])
 }
@@ -844,23 +852,76 @@ model Induction {
 }
 
 model DailyReport {
-  id            String   @id @default(uuid())
-  projectId     String
-  reportDate    DateTime
-  weather       Json?
-  personnel     Json
-  plant         Json
-  activities    Json
-  quantities    Json?
-  delays        Json?
-  visitors      Json?
-  safetyNotes   String?
-  photos        Json?
-  submittedById String
-  status        Status   @default(DRAFT)
-  project       Project  @relation(fields: [projectId], references: [id])
+  id                 String             @id @default(uuid())
+  projectId          String
+  reportDate         DateTime
+  weather            Json?
+  personnel          Json
+  plant              Json
+  activities         Json
+  quantities         Json?
+  locationReferences Json?
+  materialDockets    Json?
+  voiceTranscript    String?
+  delays             Json?
+  visitors           Json?
+  safetyNotes        String?
+  photos             Json?
+  submittedById      String
+  status             Status             @default(DRAFT)
+  project            Project            @relation(fields: [projectId], references: [id])
+  productionActuals  ProductionActual[]
 
   @@unique([projectId, reportDate])
+}
+
+model ProductionActual {
+  id              String       @id @default(uuid())
+  projectId       String
+  dailyReportId   String?
+  costCodeId      String?
+  activity        String
+  quantity        Decimal      @db.Decimal(14, 3)
+  unit            String
+  workHours       Decimal?     @db.Decimal(10, 2)
+  plantHours      Decimal?     @db.Decimal(10, 2)
+  location        Json?
+  materialType    String?
+  groundCondition String?
+  source          String       @default("DAILY_REPORT")
+  capturedAt      DateTime     @default(now())
+  createdById     String
+  project         Project      @relation(fields: [projectId], references: [id])
+  dailyReport     DailyReport? @relation(fields: [dailyReportId], references: [id])
+  costCode        CostCode?    @relation(fields: [costCodeId], references: [id])
+
+  @@index([projectId, capturedAt])
+  @@index([costCodeId, capturedAt])
+  @@index([dailyReportId])
+}
+
+model PlantTelemetryReading {
+  id                String       @id @default(uuid())
+  organisationId    String
+  plantId           String
+  projectId         String?
+  source            String
+  externalMachineId String?
+  capturedAt        DateTime
+  engineHours       Decimal?     @db.Decimal(12, 2)
+  idleHours         Decimal?     @db.Decimal(12, 2)
+  fuelLitres        Decimal?     @db.Decimal(12, 2)
+  odometerKm        Int?
+  latitude          Decimal?     @db.Decimal(10, 7)
+  longitude         Decimal?     @db.Decimal(10, 7)
+  payload           Json?
+  organisation      Organisation @relation(fields: [organisationId], references: [id])
+  plant             Plant        @relation(fields: [plantId], references: [id])
+  project           Project?     @relation(fields: [projectId], references: [id])
+
+  @@index([organisationId, source, capturedAt])
+  @@index([plantId, capturedAt])
+  @@index([projectId, capturedAt])
 }
 
 model Tender {

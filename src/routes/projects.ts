@@ -3,9 +3,11 @@ import { ProjectStatus, Role } from "@prisma/client";
 import { z } from "zod";
 import { allow, authed } from "../lib/access.js";
 import { audit } from "../lib/audit.js";
+import { civilLocation } from "../lib/civil.js";
 import { canTransitionProject } from "../lib/project.js";
 
-const createProject = z.object({ code: z.string().min(1).max(30), name: z.string().min(2), clientName: z.string().optional(), description: z.string().optional(), jurisdiction: z.enum(["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"]), address: z.string().optional(), contractValue: z.coerce.number().nonnegative().optional(), startDate: z.coerce.date().optional(), endDate: z.coerce.date().optional() }).refine(v => !v.startDate || !v.endDate || v.endDate >= v.startDate, "endDate must be on or after startDate");
+const geofencePoint = z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) });
+const createProject = z.object({ code: z.string().min(1).max(30), name: z.string().min(2), clientName: z.string().optional(), description: z.string().optional(), jurisdiction: z.enum(["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"]), address: z.string().optional(), alignment: z.array(civilLocation).optional(), geofence: z.array(geofencePoint).min(3).optional(), contractValue: z.coerce.number().nonnegative().optional(), startDate: z.coerce.date().optional(), endDate: z.coerce.date().optional() }).refine(v => !v.startDate || !v.endDate || v.endDate >= v.startDate, "endDate must be on or after startDate");
 const routes: FastifyPluginAsync = async (app) => {
   app.get("/", { preHandler: authed }, async req => app.prisma.project.findMany({ where: { organisationId: req.auth.organisationId }, orderBy: { code: "asc" } }));
   app.post("/", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER) }, async (req, reply) => {
