@@ -1,4 +1,4 @@
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { FileAccess, FileStorageProvider, Role } from "@prisma/client";
 import { createHash, randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
@@ -29,6 +29,14 @@ const entityPath = (body: z.infer<typeof entityRef>) => {
 const buildPathname = (organisationId: string, body: z.infer<typeof entityRef>, originalName: string) =>
   `organisations/${organisationId}/${entityPath(body)}/${randomUUID()}-${safePathPart(originalName)}`;
 
+function assertBlobConfigured(reply: FastifyReply) {
+  if (process.env.BLOB_READ_WRITE_TOKEN || (process.env.VERCEL_OIDC_TOKEN && process.env.BLOB_STORE_ID)) return null;
+  return reply.code(503).send({
+    error: "File storage is not configured",
+    message: "Set BLOB_READ_WRITE_TOKEN on the backend server, or configure VERCEL_OIDC_TOKEN with BLOB_STORE_ID.",
+  });
+}
+
 const routes: FastifyPluginAsync = async app => {
   app.get("/", { preHandler: authed }, async req => {
     const q = z.object({
@@ -47,6 +55,8 @@ const routes: FastifyPluginAsync = async app => {
   });
 
   app.post("/", { preHandler: authed }, async (req, reply) => {
+    const storageError = assertBlobConfigured(reply);
+    if (storageError) return storageError;
     const data = await req.file();
     if (!data) return reply.code(400).send({ error: "A file is required" });
     const fields = Object.fromEntries(Object.entries(data.fields).map(([key, value]) => {
@@ -128,6 +138,8 @@ const routes: FastifyPluginAsync = async app => {
   });
 
   app.post("/client-upload-token", { preHandler: authed }, async (req, reply) => {
+    const storageError = assertBlobConfigured(reply);
+    if (storageError) return storageError;
     const body = entityRef.extend({
       access: z.nativeEnum(FileAccess).default(FileAccess.PRIVATE),
       originalName: z.string().min(1),
@@ -152,6 +164,8 @@ const routes: FastifyPluginAsync = async app => {
   });
 
   app.get("/:id/download", { preHandler: authed }, async (req, reply) => {
+    const storageError = assertBlobConfigured(reply);
+    if (storageError) return storageError;
     const { id } = uuidParam.parse(req.params);
     const asset = await app.prisma.fileAsset.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId, deletedAt: null } });
     if (asset.access === FileAccess.PUBLIC) return reply.redirect(asset.url);
@@ -163,7 +177,9 @@ const routes: FastifyPluginAsync = async app => {
     return reply.send(Readable.fromWeb(result.stream as NodeReadableStream));
   });
 
-  app.delete("/:id", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.OPERATIONS_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.SITE_ENGINEER, Role.SAFETY_MANAGER) }, async req => {
+  app.delete("/:id", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.OPERATIONS_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.SITE_ENGINEER, Role.SAFETY_MANAGER) }, async (req, reply) => {
+    const storageError = assertBlobConfigured(reply);
+    if (storageError) return storageError;
     const { id } = uuidParam.parse(req.params);
     const asset = await app.prisma.fileAsset.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId, deletedAt: null } });
     const blob = await import("@vercel/blob");
