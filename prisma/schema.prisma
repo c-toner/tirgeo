@@ -472,7 +472,7 @@ model Timesheet {
   parentTimesheet    Timesheet?                @relation("TimesheetCorrections", fields: [parentTimesheetId], references: [id])
   corrections        Timesheet[]               @relation("TimesheetCorrections")
 
-  @@unique([projectId, workerId, weekEnding, revision])
+  @@index([projectId, workerId, weekEnding])
   @@index([parentTimesheetId])
 }
 
@@ -604,6 +604,7 @@ model PlantPreStart {
   answers             Json
   result              InspectionResult
   defects             Json?
+  photoIds            String[]          @default([])
   signature           String?
   plant               Plant             @relation(fields: [plantId], references: [id])
   worker              Worker            @relation(fields: [workerId], references: [id])

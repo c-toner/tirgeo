@@ -429,6 +429,35 @@ code, .mono { font-family: var(--mono); font-size: 0.92em; }
   border-color: color-mix(in srgb, var(--primary) 45%, var(--line));
 }
 
+.photo-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+}
+
+.photo-chip {
+  aspect-ratio: 1;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  position: relative;
+}
+
+.photo-chip img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.photo-chip .btn-icon {
+  background: rgba(16, 20, 24, 0.72);
+  color: #fff;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+}
+
 /* ---------- Field crew mode ---------- */
 
 .crew-hero {

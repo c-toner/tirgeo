@@ -6,6 +6,7 @@ import {
   ErrorAlert,
   Field,
   Icon,
+  Loading,
   Modal,
   Select,
   StatusBadge,
@@ -35,10 +36,21 @@ interface EntryDraft {
   notes: string;
 }
 
+function localDate(value = new Date()): string {
+  const offset = value.getTimezoneOffset() * 60000;
+  return new Date(value.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function yesterday(): string {
+  const date = new Date();
+  date.setDate(date.getDate() - 1);
+  return localDate(date);
+}
+
 function newEntry(date?: string): EntryDraft {
   return {
     id: uuid(),
-    workDate: date ?? "",
+    workDate: date ?? localDate(),
     start: "07:00",
     finish: "15:30",
     breakMinutes: "30",
@@ -57,21 +69,26 @@ function entryMinutes(entry: EntryDraft): { elapsed: number; ordinary: number; o
   return { elapsed: Math.max(elapsed, 0), ordinary: Math.max(elapsed - overtime, 0), overtime };
 }
 
-/** Sunday on/after today as the default week-ending. */
-function defaultWeekEnding(): string {
-  const now = new Date();
-  const sunday = new Date(now);
-  sunday.setDate(now.getDate() + ((7 - now.getDay()) % 7));
-  const offset = sunday.getTimezoneOffset() * 60000;
-  return new Date(sunday.getTime() - offset).toISOString().slice(0, 10);
+/** Sunday on/after the latest entered work date, used for payroll grouping. */
+function weekEndingForEntries(entries: EntryDraft[]): string {
+  const dates = entries.map(entry => entry.workDate).filter(Boolean).sort();
+  const base = dates.length ? new Date(`${dates[dates.length - 1]}T00:00:00`) : new Date();
+  base.setDate(base.getDate() + ((7 - base.getDay()) % 7));
+  return localDate(base);
+}
+
+function timecardLabel(timesheet: Timesheet): string {
+  const dates = [...new Set(timesheet.entries.map(entry => formatDate(entry.workDate)))];
+  if (dates.length === 1) return dates[0]!;
+  return `${dates.length} days to ${formatDate(timesheet.weekEnding)}`;
 }
 
 function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCreated: (timesheet: Timesheet) => void }) {
   const toast = useToast();
   const [projectId, setProjectId] = useState("");
   const [workerId, setWorkerId] = useState("");
-  const [weekEnding, setWeekEnding] = useState(defaultWeekEnding());
   const [entries, setEntries] = useState<EntryDraft[]>([newEntry()]);
+  const weekEnding = weekEndingForEntries(entries);
 
   const patch = (index: number, changes: Partial<EntryDraft>) =>
     setEntries((list) => list.map((entry, i) => (i === index ? { ...entry, ...changes } : entry)));
@@ -141,8 +158,8 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
                 onSuccess: (timesheet) => {
                   rememberRecent("timesheets", {
                     id: timesheet.id,
-                    label: `Week ending ${formatDate(timesheet.weekEnding)}`,
-                    sublabel: `${timesheet.entries.length} entries`,
+                    label: timecardLabel(timesheet),
+                    sublabel: `${timesheet.entries.length} shift${timesheet.entries.length === 1 ? "" : "s"} · payroll week ${formatDate(timesheet.weekEnding)}`,
                     status: "DRAFT",
                   });
                   toast.push("Draft timecard created — sign and submit it");
@@ -174,19 +191,27 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
         <Field label="Project" required>
           <ProjectSelect value={projectId} onChange={setProjectId} allowEmpty emptyLabel="— Select project —" activeOnly />
         </Field>
-        <Field label="Week ending" required hint="All entries must fall in this week (organisation timezone).">
-          <TextInput value={weekEnding} onChange={setWeekEnding} type="date" />
-        </Field>
         <Field label="Worker" required span2 hint="Your linked worker is selected by default. Workers can only create their own timecards.">
           <WorkerSelect value={workerId} onChange={setWorkerId} />
         </Field>
       </div>
 
       <div className="row-between">
-        <h3>Shifts</h3>
-        <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry()])}>
-          <Icon name="plus" size={13} /> Add shift
-        </button>
+        <div>
+          <h3>Daily timecards</h3>
+          <span className="tiny">Do today, yesterday, or add several days for the week in one go.</span>
+        </div>
+        <div className="row">
+          <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry(localDate())])}>
+            Today
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry(yesterday())])}>
+            Yesterday
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry()])}>
+            <Icon name="plus" size={13} /> Add day
+          </button>
+        </div>
       </div>
 
       {entries.map((entry, index) => {
@@ -194,7 +219,7 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
         return (
           <div key={entry.id} className="card card-pad stack" style={{ boxShadow: "none", gap: 10 }}>
             <div className="row" style={{ alignItems: "flex-end" }}>
-              <Field label="Date" required>
+              <Field label="Work date" required>
                 <TextInput value={entry.workDate} onChange={(value) => patch(index, { workDate: value })} type="date" />
               </Field>
               <Field label="Start">
@@ -235,17 +260,21 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
   const { user } = useAuth();
   const toast = useToast();
   const { data: approvers } = useApiQuery<ApproverSummary[]>("/api/v1/timesheets/approvers");
+  const [lodged, setLodged] = useState(false);
+  const [approvalMode, setApprovalMode] = useState<"request" | "onsite" | null>(null);
   const [approverUserId, setApproverUserId] = useState("");
   const [signedName, setSignedName] = useState(user?.name ?? "");
   const [signature, setSignature] = useState<SignatureValue | null>(null);
+  const [pin, setPin] = useState("");
+  const [approverName, setApproverName] = useState("");
+  const [approverSignature, setApproverSignature] = useState<SignatureValue | null>(null);
   const [consent, setConsent] = useState(false);
 
-  const mutation = useMutation(
+  const signMutation = useMutation(
     () =>
       api<Timesheet>(`/api/v1/timesheets/${timesheetId}/submit`, {
         method: "POST",
         body: {
-          approverUserId,
           signedName: signedName.trim(),
           signature: signature!.signature,
           signatureMethod: signature!.signatureMethod,
@@ -254,52 +283,134 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
       }),
     [],
   );
+  const requestMutation = useMutation(
+    () => api(`/api/v1/timesheets/${timesheetId}/request-approval`, { method: "POST", body: { approverUserId } }),
+    ["/api/v1/notifications"],
+  );
+  const onsiteMutation = useMutation(
+    () =>
+      api<Timesheet>(`/api/v1/timesheets/${timesheetId}/onsite-approve`, {
+        method: "POST",
+        body: {
+          approverUserId,
+          pin,
+          signedName: approverName.trim(),
+          signature: approverSignature!.signature,
+          signatureMethod: approverSignature!.signatureMethod,
+          consent: true,
+        },
+      }),
+    ["/api/v1/notifications"],
+  );
 
   return (
     <Modal
-      title="Sign & submit timecard"
+      title="Lodge timecard"
       onClose={onClose}
       footer={
         <>
           <button className="btn btn-ghost" onClick={onClose}>
-            Cancel
+            {lodged ? "Done" : "Cancel"}
           </button>
-          <button
-            className="btn btn-accent"
-            disabled={mutation.running || !approverUserId || !signature || signedName.trim().length < 2 || !consent}
-            onClick={() =>
-              mutation.run({
-                onSuccess: () => {
-                  updateRecent("timesheets", timesheetId, { status: "SUBMITTED" });
-                  toast.push("Submitted — your approver has been notified");
-                  onClose();
-                },
-              })
-            }
-          >
-            {mutation.running ? "Submitting…" : "Sign & submit"}
-          </button>
+          {!lodged && (
+            <button
+              className="btn btn-accent"
+              disabled={signMutation.running || !signature || signedName.trim().length < 2 || !consent}
+              onClick={() =>
+                signMutation.run({
+                  onSuccess: () => {
+                    updateRecent("timesheets", timesheetId, { status: "SUBMITTED" });
+                    setLodged(true);
+                    toast.push("Timecard lodged");
+                  },
+                })
+              }
+            >
+              {signMutation.running ? "Lodging..." : "Sign & lodge"}
+            </button>
+          )}
+          {lodged && approvalMode === "request" && (
+            <button
+              className="btn btn-primary"
+              disabled={requestMutation.running || !approverUserId}
+              onClick={() =>
+                requestMutation.run({
+                  onSuccess: () => {
+                    toast.push("Signature requested");
+                    onClose();
+                  },
+                })
+              }
+            >
+              {requestMutation.running ? "Requesting..." : "Request signature"}
+            </button>
+          )}
+          {lodged && approvalMode === "onsite" && (
+            <button
+              className="btn btn-primary"
+              disabled={onsiteMutation.running || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2}
+              onClick={() =>
+                onsiteMutation.run({
+                  onSuccess: () => {
+                    updateRecent("timesheets", timesheetId, { status: "APPROVED" });
+                    toast.push("Timecard approved on site");
+                    onClose();
+                  },
+                })
+              }
+            >
+              {onsiteMutation.running ? "Signing..." : "Add signature & approve"}
+            </button>
+          )}
         </>
       }
     >
-      <ErrorAlert error={mutation.error} onDismiss={mutation.reset} />
-      <Field label="Approver" required hint="Owner, admin, PM, supervisor or foreman — they countersign on site or from their notifications.">
-        <Select
-          value={approverUserId}
-          onChange={setApproverUserId}
-          allowEmpty
-          emptyLabel="— Select approver —"
-          options={(approvers ?? []).map((approver) => ({
-            value: approver.id,
-            label: `${approver.name} (${titleCase(approver.role)})`,
-          }))}
-        />
-      </Field>
-      <SignaturePad signedName={signedName} onNameChange={setSignedName} onChange={setSignature} />
-      <label className="row" style={{ gap: 8, alignItems: "flex-start", fontSize: 13 }}>
-        <input type="checkbox" checked={consent} onChange={(e: { target: { checked: boolean } }) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
-        <span>I confirm this timecard is a complete and accurate record of the hours I worked.</span>
-      </label>
+      <ErrorAlert error={signMutation.error || requestMutation.error || onsiteMutation.error} onDismiss={() => { signMutation.reset(); requestMutation.reset(); onsiteMutation.reset(); }} />
+      {!lodged ? (
+        <>
+          <SignaturePad signedName={signedName} onNameChange={setSignedName} onChange={setSignature} />
+          <label className="row" style={{ gap: 8, alignItems: "flex-start", fontSize: 13 }}>
+            <input type="checkbox" checked={consent} onChange={(e: { target: { checked: boolean } }) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
+            <span>I confirm this timecard is a complete and accurate record of the hours I worked.</span>
+          </label>
+        </>
+      ) : (
+        <div className="stack">
+          <div className="alert alert-info">
+            Timecard lodged. Pick how the manager or supervisor will countersign it.
+          </div>
+          <div className="seg" style={{ width: "fit-content" }}>
+            <button type="button" className={approvalMode === "onsite" ? "on-pass" : ""} onClick={() => setApprovalMode("onsite")}>
+              Add signature + PIN
+            </button>
+            <button type="button" className={approvalMode === "request" ? "on-pass" : ""} onClick={() => setApprovalMode("request")}>
+              Request signature
+            </button>
+          </div>
+          {approvalMode && (
+            <Field label="Approver" required hint="Owner, admin, PM, supervisor or foreman.">
+              <Select
+                value={approverUserId}
+                onChange={setApproverUserId}
+                allowEmpty
+                emptyLabel="— Select approver —"
+                options={(approvers ?? []).map((approver) => ({
+                  value: approver.id,
+                  label: `${approver.name} (${titleCase(approver.role)})`,
+                }))}
+              />
+            </Field>
+          )}
+          {approvalMode === "onsite" && (
+            <>
+              <Field label="Approver PIN" required hint="The approver enters their 4-digit signing PIN.">
+                <TextInput value={pin} onChange={setPin} type="password" inputMode="numeric" maxLength={4} placeholder="0000" />
+              </Field>
+              <SignaturePad signedName={approverName} onNameChange={setApproverName} onChange={setApproverSignature} nameLabel="Approver name" />
+            </>
+          )}
+        </div>
+      )}
     </Modal>
   );
 }
@@ -472,6 +583,7 @@ export function TimesheetsPage() {
   const [rejectFor, setRejectFor] = useState<string | null>(null);
   const [actionId, setActionId] = useState(openParam ?? "");
   const [, forceRender] = useState(0);
+  const { data: pendingApprovals, loading: pendingLoading, error: pendingError, refresh: refreshPending } = useApiQuery<Timesheet[]>(isApprover ? "/api/v1/timesheets/pending-approvals" : null);
 
   const recents = listRecents("timesheets");
 
@@ -480,8 +592,8 @@ export function TimesheetsPage() {
       const corrected = await api<Timesheet>(`/api/v1/timesheets/${id}/correct`, { method: "POST" });
       rememberRecent("timesheets", {
         id: corrected.id,
-        label: `Week ending ${formatDate(corrected.weekEnding)} (rev ${corrected.revision})`,
-        sublabel: `${corrected.entries.length} entries`,
+        label: `${timecardLabel(corrected)} (rev ${corrected.revision})`,
+        sublabel: `${corrected.entries.length} shift${corrected.entries.length === 1 ? "" : "s"} · payroll week ${formatDate(corrected.weekEnding)}`,
         status: "DRAFT",
       });
       toast.push("Correction draft created — review, sign and resubmit");
@@ -518,7 +630,7 @@ export function TimesheetsPage() {
         {recents.length === 0 ? (
           <EmptyState
             title="No timecards yet"
-            hint="Create a draft for the week, sign it and pick your approver. Weekly cards are validated shift by shift."
+            hint="Create today or yesterday's card, sign it and pick your approver. You can add several days at once when catching up."
             action={
               <button className="btn btn-primary" onClick={() => setDrafting(true)}>
                 <Icon name="plus" size={15} /> New timecard
@@ -577,8 +689,60 @@ export function TimesheetsPage() {
       {isApprover && (
         <section className="card">
           <div className="card-header">
-            <h2>Approver actions</h2>
-            <span className="hint">Approval requests arrive as notifications with the timecard ID.</span>
+            <h2>Awaiting your signature ({pendingApprovals?.length ?? 0})</h2>
+            <span className="hint">Requested timecards that need your approval.</span>
+          </div>
+          <ErrorAlert error={pendingError} />
+          {pendingLoading && <Loading />}
+          {!pendingLoading && (!pendingApprovals || pendingApprovals.length === 0) && (
+            <EmptyState title="No pending timecards" hint="Requested approvals will appear here." />
+          )}
+          {pendingApprovals && pendingApprovals.length > 0 && (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>Worker</th>
+                    <th>Timecard</th>
+                    <th>Hours</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingApprovals.map(card => {
+                    const totals = card.entries.map(entry => entry.ordinaryMinutes + entry.overtimeMinutes).reduce((sum, value) => sum + value, 0);
+                    return (
+                      <tr key={card.id}>
+                        <td>
+                          <b>{card.worker ? `${card.worker.firstName} ${card.worker.lastName}` : "Worker"}</b>
+                          <div className="tiny">{card.project ? `${card.project.code} · ${card.project.name}` : card.projectId}</div>
+                        </td>
+                        <td>
+                          <b>{timecardLabel(card)}</b>
+                          <div className="mono tiny">{card.id}</div>
+                        </td>
+                        <td className="tiny">{minutesToHours(totals)}h</td>
+                        <td>
+                          <div className="row" style={{ justifyContent: "flex-end", gap: 6, flexWrap: "nowrap" }}>
+                            <button className="btn btn-primary btn-sm" onClick={() => setApproveFor(card.id)}>Sign</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => setRejectFor(card.id)}>Reject</button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      )}
+
+      {isApprover && (
+        <section className="card">
+          <div className="card-header">
+            <h2>Find timecard</h2>
+            <span className="hint">Use a timecard ID from a notification or message.</span>
           </div>
           <div className="card-pad stack">
             <div className="row">
@@ -605,9 +769,9 @@ export function TimesheetsPage() {
 
       {drafting && <DraftTimesheetModal onClose={() => setDrafting(false)} onCreated={() => forceRender((n) => n + 1)} />}
       {submitFor && <SubmitModal timesheetId={submitFor} onClose={() => { setSubmitFor(null); forceRender((n) => n + 1); }} />}
-      {approveFor && <ApproveModal timesheetId={approveFor} mode="approve" onClose={() => { setApproveFor(null); forceRender((n) => n + 1); }} />}
+      {approveFor && <ApproveModal timesheetId={approveFor} mode="approve" onClose={() => { setApproveFor(null); refreshPending(); forceRender((n) => n + 1); }} />}
       {onsiteFor && <ApproveModal timesheetId={onsiteFor} mode="onsite" onClose={() => { setOnsiteFor(null); forceRender((n) => n + 1); }} />}
-      {rejectFor && <RejectModal timesheetId={rejectFor} onClose={() => { setRejectFor(null); forceRender((n) => n + 1); }} />}
+      {rejectFor && <RejectModal timesheetId={rejectFor} onClose={() => { setRejectFor(null); refreshPending(); forceRender((n) => n + 1); }} />}
     </Layout>
   );
 }

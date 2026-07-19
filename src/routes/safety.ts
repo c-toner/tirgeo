@@ -164,7 +164,9 @@ const routes: FastifyPluginAsync = async app => {
     if (q.projectId) await requireOrganisationProject(app, req, q.projectId);
     const projectFilter = q.projectId ? { projectId: q.projectId } : {};
     const now = new Date();
-    const [openHazards, highRiskHazards, overdueControls, openActions, overdueActions, openIncidents, activePermits, pendingDocuments, recentObservations, recentInspections] = await Promise.all([
+    const [activeProjects, pendingTimecards, openHazards, highRiskHazards, overdueControls, openActions, overdueActions, openIncidents, activePermits, pendingDocuments, recentObservations, recentInspections] = await Promise.all([
+      app.prisma.project.count({ where: { organisationId: req.auth.organisationId, status: "ACTIVE" } }),
+      app.prisma.timesheetApprovalRequest.count({ where: { approverUserId: req.auth.userId, status: "PENDING", timesheet: { project: { organisationId: req.auth.organisationId } } } }),
       app.prisma.hazardRegisterItem.count({ where: { organisationId: req.auth.organisationId, ...projectFilter, status: { not: HazardStatus.CLOSED } } }),
       app.prisma.hazardRegisterItem.count({ where: { organisationId: req.auth.organisationId, ...projectFilter, status: { not: HazardStatus.CLOSED }, riskLevel: { in: [RiskLevel.HIGH, RiskLevel.EXTREME] } } }),
       app.prisma.controlMeasure.count({ where: { organisationId: req.auth.organisationId, ...projectFilter, verifiedAt: null, reviewDueAt: { lt: now } } }),
@@ -176,7 +178,7 @@ const routes: FastifyPluginAsync = async app => {
       app.prisma.safetyObservation.findMany({ where: { organisationId: req.auth.organisationId, ...projectFilter }, orderBy: { observedAt: "desc" }, take: 5 }),
       app.prisma.hseqInspection.findMany({ where: { organisationId: req.auth.organisationId, ...projectFilter }, orderBy: { inspectedAt: "desc" }, take: 5, include: { items: true } }),
     ]);
-    return { openHazards, highRiskHazards, overdueControls, openActions, overdueActions, openIncidents, activePermits, pendingDocuments, recentObservations, recentInspections };
+    return { activeProjects, pendingTimecards, openHazards, highRiskHazards, overdueControls, openActions, overdueActions, openIncidents, activePermits, pendingDocuments, recentObservations, recentInspections };
   });
 };
 export default routes;

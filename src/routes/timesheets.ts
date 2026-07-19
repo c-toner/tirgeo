@@ -10,6 +10,12 @@ import { randomUUID } from "node:crypto";
 const entry = z.object({ id: z.string().uuid().optional(), costCodeId: z.string().uuid().optional(), workDate: z.coerce.date(), startedAt: z.coerce.date(), finishedAt: z.coerce.date(), unpaidBreakMinutes: z.number().int().min(0).max(24 * 60).default(0), ordinaryMinutes: z.number().int().min(0).max(24 * 60), overtimeMinutes: z.number().int().min(0).max(24 * 60).default(0), allowanceCodes: z.array(z.string().min(1).max(50)).max(20).default([]), notes: z.string().max(2000).optional() }).refine(v => v.finishedAt > v.startedAt, "finish must be after start");
 const routes: FastifyPluginAsync = async app => {
   app.get("/approvers", { preHandler: authed }, req => app.prisma.user.findMany({ where: { organisationId: req.auth.organisationId, active: true, id: { not: req.auth.userId }, role: { in: [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN] } }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }));
+  app.get("/pending-approvals", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN) }, async req => app.prisma.timesheet.findMany({
+    where: { status: Status.SUBMITTED, project: { organisationId: req.auth.organisationId }, approvalRequest: { approverUserId: req.auth.userId, status: ApprovalRequestStatus.PENDING } },
+    include: { worker: true, project: true, entries: true, signatures: true, approvalRequest: true },
+    orderBy: [{ submittedAt: "asc" }, { weekEnding: "asc" }],
+    take: 100,
+  }));
   app.post("/", { preHandler: authed }, async (req, reply) => {
     const body = z.object({ projectId: z.string().uuid(), workerId: z.string().uuid(), weekEnding: z.coerce.date(), entries: z.array(entry).min(1) }).parse(req.body);
     const entries = body.entries.map(e => ({ ...e, id: e.id ?? randomUUID(), costCodeId: e.costCodeId ?? null, notes: e.notes ?? null }));
@@ -24,18 +30,36 @@ const routes: FastifyPluginAsync = async app => {
   });
   app.post("/:id/submit", { preHandler: authed }, async (req, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-    const body = z.object({ approverUserId: z.string().uuid(), signedName: z.string().min(2), signature: z.string().min(1).max(500_000), signatureMethod: z.enum(["DRAWN", "TYPED"]), consent: z.literal(true) }).parse(req.body);
+    const body = z.object({ approverUserId: z.string().uuid().optional(), signedName: z.string().min(2), signature: z.string().min(1).max(500_000), signatureMethod: z.enum(["DRAWN", "TYPED"]), consent: z.literal(true) }).parse(req.body);
     const existing = await app.prisma.timesheet.findFirstOrThrow({ where: { id, status: Status.DRAFT, worker: { organisationId: req.auth.organisationId, userId: req.auth.userId } }, include: { entries: true } });
+    const approver = body.approverUserId ? await app.prisma.user.findFirstOrThrow({ where: { id: body.approverUserId, organisationId: req.auth.organisationId, active: true, role: { in: [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN] } } }) : null;
+    if (approver?.id === req.auth.userId) return reply.code(400).send({ error: "The employee and approver must be different users" });
+    const signer = await app.prisma.user.findUniqueOrThrow({ where: { id: req.auth.userId } }); const contentHash = timesheetContentHash(existing);
+    const result = await app.prisma.$transaction(async tx => {
+      await tx.timesheetSignature.create({ data: { timesheetId: id, signerUserId: req.auth.userId, type: TimesheetSignatureType.EMPLOYEE, signedName: signer.name, signature: body.signature, signatureMethod: body.signatureMethod, timesheetContentHash: contentHash, consentText: "I confirm this timecard is a complete and accurate record of the hours I worked.", ipAddress: req.ip, userAgent: req.headers["user-agent"] } });
+      const submitted = await tx.timesheet.update({ where: { id }, data: { status: Status.SUBMITTED, submittedAt: new Date(), contentHash, approvalRequest: approver ? { create: { approverUserId: approver.id, requestedByUserId: req.auth.userId } } : undefined }, include: { signatures: true, approvalRequest: true, entries: true } });
+      if (approver) await tx.notification.create({ data: { userId: approver.id, type: "TIMESHEET_APPROVAL_REQUESTED", title: "Timecard awaiting your signature", body: `${signer.name} submitted a timecard for approval.`, entityType: "Timesheet", entityId: id } });
+      await tx.auditEvent.create({ data: auditData(req, "SUBMIT", "Timesheet", id, { status: Status.SUBMITTED, contentHash, approverUserId: approver?.id ?? null }) });
+      return submitted;
+    });
+    return result;
+  });
+  app.post("/:id/request-approval", { preHandler: authed }, async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const body = z.object({ approverUserId: z.string().uuid() }).parse(req.body);
+    const existing = await app.prisma.timesheet.findFirstOrThrow({ where: { id, status: Status.SUBMITTED, worker: { organisationId: req.auth.organisationId, userId: req.auth.userId }, signatures: { some: { type: TimesheetSignatureType.EMPLOYEE } } }, include: { worker: true, approvalRequest: true } });
+    if (existing.approvalRequest?.status === ApprovalRequestStatus.PENDING) return reply.code(409).send({ error: "This timecard already has a pending approval request" });
     const approver = await app.prisma.user.findFirstOrThrow({ where: { id: body.approverUserId, organisationId: req.auth.organisationId, active: true, role: { in: [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN] } } });
     if (approver.id === req.auth.userId) return reply.code(400).send({ error: "The employee and approver must be different users" });
-    const signer = await app.prisma.user.findUniqueOrThrow({ where: { id: req.auth.userId } }); const contentHash = timesheetContentHash(existing);
-    const [, result] = await app.prisma.$transaction([
-      app.prisma.timesheetSignature.create({ data: { timesheetId: id, signerUserId: req.auth.userId, type: TimesheetSignatureType.EMPLOYEE, signedName: signer.name, signature: body.signature, signatureMethod: body.signatureMethod, timesheetContentHash: contentHash, consentText: "I confirm this timecard is a complete and accurate record of the hours I worked.", ipAddress: req.ip, userAgent: req.headers["user-agent"] } }),
-      app.prisma.timesheet.update({ where: { id }, data: { status: Status.SUBMITTED, submittedAt: new Date(), contentHash, approvalRequest: { create: { approverUserId: approver.id, requestedByUserId: req.auth.userId } } }, include: { signatures: true, approvalRequest: true } }),
-      app.prisma.notification.create({ data: { userId: approver.id, type: "TIMESHEET_APPROVAL_REQUESTED", title: "Timecard awaiting your signature", body: `${signer.name} submitted a timecard for approval.`, entityType: "Timesheet", entityId: id } }),
-      app.prisma.auditEvent.create({ data: auditData(req, "SUBMIT", "Timesheet", id, { status: Status.SUBMITTED, contentHash, approverUserId: approver.id }) }),
-    ]);
-    return result;
+    const request = await app.prisma.$transaction(async tx => {
+      const approvalRequest = existing.approvalRequest
+        ? await tx.timesheetApprovalRequest.update({ where: { timesheetId: id }, data: { approverUserId: approver.id, requestedByUserId: req.auth.userId, status: ApprovalRequestStatus.PENDING, requestedAt: new Date(), respondedAt: null, rejectionReason: null } })
+        : await tx.timesheetApprovalRequest.create({ data: { timesheetId: id, approverUserId: approver.id, requestedByUserId: req.auth.userId } });
+      await tx.notification.create({ data: { userId: approver.id, type: "TIMESHEET_APPROVAL_REQUESTED", title: "Timecard awaiting your signature", body: `${existing.worker.firstName} ${existing.worker.lastName} requested approval on a timecard.`, entityType: "Timesheet", entityId: id } });
+      await tx.auditEvent.create({ data: auditData(req, "REQUEST_APPROVAL", "Timesheet", id, { approverUserId: approver.id }) });
+      return approvalRequest;
+    });
+    return reply.code(201).send(request);
   });
   app.post("/:id/approve", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN) }, async req => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
@@ -61,12 +85,12 @@ const routes: FastifyPluginAsync = async app => {
       return reply.code(401).send({ error: "Supervisor verification failed" });
     }
     await app.prisma.user.update({ where: { id: approver.id }, data: { signaturePinFailedAttempts: 0, signaturePinLockedUntil: null } });
-    const existing = await app.prisma.timesheet.findFirstOrThrow({ where: { id, status: Status.SUBMITTED, worker: { userId: req.auth.userId, organisationId: req.auth.organisationId }, approvalRequest: { approverUserId: approver.id, status: ApprovalRequestStatus.PENDING } }, include: { entries: true } });
+    const existing = await app.prisma.timesheet.findFirstOrThrow({ where: { id, status: Status.SUBMITTED, worker: { userId: req.auth.userId, organisationId: req.auth.organisationId } }, include: { entries: true, approvalRequest: true } });
     const currentHash = timesheetContentHash(existing);
     if (!existing.contentHash || currentHash !== existing.contentHash) return reply.code(409).send({ error: "Timecard contents changed after the employee signed it" });
     const [, result] = await app.prisma.$transaction([
       app.prisma.timesheetSignature.create({ data: { timesheetId: id, signerUserId: approver.id, type: TimesheetSignatureType.APPROVER, signedName: approver.name, signature: body.signature, signatureMethod: body.signatureMethod, timesheetContentHash: currentHash, consentText: "I have reviewed this timecard and approve the recorded hours.", ipAddress: req.ip, userAgent: req.headers["user-agent"] } }),
-      app.prisma.timesheet.update({ where: { id }, data: { status: Status.APPROVED, approvedAt: new Date(), approvedById: approver.id, approvalRequest: { update: { status: ApprovalRequestStatus.APPROVED, respondedAt: new Date() } } }, include: { signatures: true, approvalRequest: true } }),
+      app.prisma.timesheet.update({ where: { id }, data: { status: Status.APPROVED, approvedAt: new Date(), approvedById: approver.id, approvalRequest: existing.approvalRequest ? { update: { status: ApprovalRequestStatus.APPROVED, approverUserId: approver.id, respondedAt: new Date() } } : { create: { approverUserId: approver.id, requestedByUserId: req.auth.userId, status: ApprovalRequestStatus.APPROVED, respondedAt: new Date() } } }, include: { signatures: true, approvalRequest: true } }),
       app.prisma.notification.updateMany({ where: { userId: approver.id, entityType: "Timesheet", entityId: id, readAt: null }, data: { readAt: new Date() } }),
       app.prisma.auditEvent.create({ data: { organisationId: req.auth.organisationId, actorId: approver.id, action: "ONSITE_APPROVE", entityType: "Timesheet", entityId: id, after: { sharedDevice: true, approvedById: approver.id }, ipAddress: req.ip } }),
     ]);

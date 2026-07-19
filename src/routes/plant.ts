@@ -59,7 +59,7 @@ const routes: FastifyPluginAsync = async app => {
   app.post("/:id/pre-starts", { preHandler: authed }, async (req, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const plant = await app.prisma.plant.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId } });
-    const body = z.object({ workerId: z.string().uuid(), projectId: z.string().uuid().optional(), inspectedAt: z.coerce.date().optional(), hourMeter: z.number().nonnegative().optional(), odometerKm: z.number().int().nonnegative().optional(), checklistTemplateId: z.string().uuid(), answers: z.record(z.union([z.boolean(), z.string(), z.number(), z.null()])), result: z.nativeEnum(InspectionResult), defects: z.array(z.object({ questionId: z.string(), item: z.string().min(1), severity: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]), detail: z.string().min(1), photoIds: z.array(z.string()).default([]) })).default([]), signature: z.string().min(1).max(500_000) }).parse(req.body);
+    const body = z.object({ workerId: z.string().uuid(), projectId: z.string().uuid().optional(), inspectedAt: z.coerce.date().optional(), hourMeter: z.number().nonnegative().optional(), odometerKm: z.number().int().nonnegative().optional(), checklistTemplateId: z.string().uuid(), answers: z.record(z.union([z.boolean(), z.string(), z.number(), z.null()])), result: z.nativeEnum(InspectionResult), photoIds: z.array(z.string().uuid()).max(30).default([]), defects: z.array(z.object({ questionId: z.string(), item: z.string().min(1), severity: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]), detail: z.string().min(1), photoIds: z.array(z.string().uuid()).max(20).default([]) })).default([]), signature: z.string().min(1).max(500_000) }).parse(req.body);
     if (body.projectId) await requireOrganisationProject(app, req, body.projectId);
     await app.prisma.worker.findFirstOrThrow({ where: { id: body.workerId, organisationId: req.auth.organisationId, userId: req.auth.userId } });
     const template = await app.prisma.preStartTemplate.findFirstOrThrow({ where: { id: body.checklistTemplateId, organisationId: req.auth.organisationId, status: "PUBLISHED", OR: [{ plantType: null }, { plantType: plant.type }] } });
@@ -71,6 +71,11 @@ const routes: FastifyPluginAsync = async app => {
     if (!hasDefect && body.result !== InspectionResult.PASS) return reply.code(409).send({ error: "A defect result requires at least one defect-triggering answer" });
     const defectIds = new Set(body.defects.map(d => d.questionId)); const missingDefects = triggeringQuestions.filter(questionId => !defectIds.has(questionId));
     if (missingDefects.length) return reply.code(400).send({ error: "Every failed check requires a defect record", questionIds: missingDefects });
+    const submittedPhotoIds = [...new Set([...body.photoIds, ...body.defects.flatMap(defect => defect.photoIds)])];
+    if (submittedPhotoIds.length) {
+      const photoCount = await app.prisma.fileAsset.count({ where: { id: { in: submittedPhotoIds }, organisationId: req.auth.organisationId, deletedAt: null } });
+      if (photoCount !== submittedPhotoIds.length) return reply.code(400).send({ error: "Every pre-start photo must belong to this organisation" });
+    }
     if (body.result === InspectionResult.OUT_OF_SERVICE && body.answers["lockout-tagout"] !== true) return reply.code(409).send({ error: "Out-of-service plant must be locked out or tagged out" });
     const [preStart] = await app.prisma.$transaction([
       app.prisma.plantPreStart.create({ data: { ...body, plantId: id, checklistVersion: `${template.name}:v${template.version}`, answers: body.answers, defects: body.defects } }),

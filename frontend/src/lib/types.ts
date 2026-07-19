@@ -186,6 +186,8 @@ export interface Timesheet {
   submittedAt?: string | null;
   approvedAt?: string | null;
   entries: TimeEntry[];
+  worker?: WorkerSummary & { firstName: string; lastName: string };
+  project?: Project;
   signatures?: TimesheetSignature[];
   approvalRequest?: { approverUserId: string; status: string } | null;
 }
@@ -202,6 +204,16 @@ export interface Plant {
   odometerKm?: number | null;
   nextServiceAt?: string | null;
   nextServiceHours?: number | null;
+}
+
+export interface FileAsset {
+  id: string;
+  url: string;
+  downloadUrl?: string | null;
+  originalName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt?: string;
 }
 
 export interface WorkerSummary {
@@ -394,6 +406,8 @@ export interface SafetyAssignment {
 }
 
 export interface HseqDashboard {
+  activeProjects: number;
+  pendingTimecards: number;
   openHazards: number;
   highRiskHazards: number;
   overdueControls: number;

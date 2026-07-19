@@ -21,7 +21,7 @@ import { api } from "../../lib/api.ts";
 import { PLANT_CLEARERS, PROJECT_LEADERS, TEMPLATE_ADMINS, useAuth } from "../../lib/auth.tsx";
 import { formatDate, titleCase } from "../../lib/format.ts";
 import { Link } from "../../lib/router.tsx";
-import type { InspectionResult, Plant, PreStartDefect, PreStartTemplate } from "../../lib/types.ts";
+import type { FileAsset, InspectionResult, Plant, PreStartDefect, PreStartTemplate } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
 
 const DEFECT_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
@@ -107,6 +107,8 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
   const [hourMeter, setHourMeter] = useState("");
   const [answers, setAnswers] = useState<Record<string, boolean | string | number | null>>({});
   const [defects, setDefects] = useState<Record<string, PreStartDefect>>({});
+  const [photos, setPhotos] = useState<FileAsset[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const [signature, setSignature] = useState<SignatureValue | null>(null);
   const [signedName, setSignedName] = useState("");
 
@@ -143,6 +145,28 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
       },
     }));
 
+  const uploadPhotos = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setUploadingPhotos(true);
+    try {
+      const uploaded: FileAsset[] = [];
+      for (const file of Array.from(files)) {
+        const formData = new FormData();
+        formData.set("file", file);
+        formData.set("entityType", "PlantPreStart");
+        formData.set("metadata", JSON.stringify({ plantId: plant.id, assetNumber: plant.assetNumber, draft: true }));
+        const asset = await api<FileAsset>("/api/v1/files", { method: "POST", formData });
+        uploaded.push(asset);
+      }
+      setPhotos(current => [...current, ...uploaded]);
+      toast.push(uploaded.length === 1 ? "Photo added" : `${uploaded.length} photos added`);
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : "Photo upload failed", "error");
+    } finally {
+      setUploadingPhotos(false);
+    }
+  };
+
   const mutation = useMutation(
     () =>
       api(`/api/v1/plant/${plant.id}/pre-starts`, {
@@ -155,6 +179,7 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
           checklistTemplateId: templateId,
           answers,
           result,
+          photoIds: photos.map(photo => photo.id),
           defects: triggering.map((id) => defects[id]).filter(Boolean),
           signature: signature?.signature ?? "",
         },
@@ -251,6 +276,41 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
           <TextInput value={hourMeter} onChange={setHourMeter} type="number" min={0} inputMode="decimal" />
         </Field>
       </div>
+
+      <section className="stack">
+        <div className="row-between">
+          <div>
+            <h3>Photos</h3>
+            <span className="tiny">Add machine condition, hour meter, defect or lockout photos.</span>
+          </div>
+          <label className={"btn btn-ghost" + (uploadingPhotos ? " disabled" : "")}>
+            <Icon name="upload" size={15} /> {uploadingPhotos ? "Uploading..." : "Add photos"}
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              style={{ display: "none" }}
+              disabled={uploadingPhotos}
+              onChange={(event) => {
+                uploadPhotos(event.target.files);
+                event.currentTarget.value = "";
+              }}
+            />
+          </label>
+        </div>
+        {photos.length > 0 && (
+          <div className="photo-grid">
+            {photos.map(photo => (
+              <div className="photo-chip" key={photo.id}>
+                <img src={photo.downloadUrl ?? photo.url} alt={photo.originalName} />
+                <button className="btn-icon" type="button" aria-label="Remove photo" onClick={() => setPhotos(current => current.filter(item => item.id !== photo.id))}>
+                  <Icon name="x" size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
 
       {template &&
         template.sections.map((section) => (
@@ -489,11 +549,9 @@ export function PlantPage() {
                     </td>
                     <td>
                       <div className="row" style={{ gap: 6, flexWrap: "nowrap", justifyContent: "flex-end" }}>
-                        {!needsClearance && (
-                          <button className="btn btn-accent btn-sm" onClick={() => setPreStartFor(plant)}>
-                            Pre-start
-                          </button>
-                        )}
+                        <button className="btn btn-accent btn-sm" onClick={() => setPreStartFor(plant)}>
+                          Pre-start
+                        </button>
                         {needsClearance && canClear && (
                           <button className="btn btn-primary btn-sm" onClick={() => setClearingFor(plant)}>
                             Clear

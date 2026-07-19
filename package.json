@@ -15,8 +15,9 @@
     "test": "vitest run",
     "lint": "eslint api src tests",
     "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
+    "db:migrate": "node scripts/prisma-with-env.mjs migrate dev",
+    "db:migrate:deploy": "node scripts/prisma-with-env.mjs migrate deploy",
+    "db:migrate:status": "node scripts/prisma-with-env.mjs migrate status",
     "db:seed": "tsx prisma/seed.ts",
     "db:seed:company": "tsx prisma/seed-company.ts"
   },
