@@ -20,7 +20,6 @@ import { WorkerSelect } from "../../components/WorkerSelect.tsx";
 import { api } from "../../lib/api.ts";
 import { TIMESHEET_APPROVERS, useAuth } from "../../lib/auth.tsx";
 import { formatDate, minutesToHours, titleCase, uuid } from "../../lib/format.ts";
-import { listRecents, rememberRecent, updateRecent } from "../../lib/recents.ts";
 import { usePath } from "../../lib/router.tsx";
 import type { ApproverSummary, Timesheet } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
@@ -149,11 +148,11 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
           consent: true,
         },
       }),
-    [],
+    ["/api/v1/timesheets"],
   );
   const requestMutation = useMutation(
     () => api(`/api/v1/timesheets/${lodgedTimesheet!.id}/request-approval`, { method: "POST", body: { approverUserId } }),
-    ["/api/v1/notifications"],
+    ["/api/v1/notifications", "/api/v1/timesheets"],
   );
   const onsiteMutation = useMutation(
     () =>
@@ -168,7 +167,7 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
           consent: true,
         },
       }),
-    ["/api/v1/notifications"],
+    ["/api/v1/notifications", "/api/v1/timesheets"],
   );
 
   const error = lodgeMutation.error || requestMutation.error || onsiteMutation.error;
@@ -206,12 +205,6 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
               onClick={() =>
                 lodgeMutation.run({
                   onSuccess: (timesheet) => {
-                    rememberRecent("timesheets", {
-                      id: timesheet.id,
-                      label: timecardLabel(timesheet),
-                      sublabel: `${timesheet.entries.length} shift${timesheet.entries.length === 1 ? "" : "s"} · payroll week ${formatDate(timesheet.weekEnding)}`,
-                      status: "SUBMITTED",
-                    });
                     setLodgedTimesheet(timesheet);
                     toast.push("Timecard lodged");
                     onCreated(timesheet);
@@ -245,7 +238,6 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
               onClick={() =>
                 onsiteMutation.run({
                   onSuccess: () => {
-                    updateRecent("timesheets", lodgedTimesheet.id, { status: "APPROVED" });
                     toast.push("Timecard approved on site");
                     onClose();
                   },
@@ -414,11 +406,11 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
           consent: true,
         },
       }),
-    [],
+    ["/api/v1/timesheets"],
   );
   const requestMutation = useMutation(
     () => api(`/api/v1/timesheets/${timesheetId}/request-approval`, { method: "POST", body: { approverUserId } }),
-    ["/api/v1/notifications"],
+    ["/api/v1/notifications", "/api/v1/timesheets"],
   );
   const onsiteMutation = useMutation(
     () =>
@@ -433,7 +425,7 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
           consent: true,
         },
       }),
-    ["/api/v1/notifications"],
+    ["/api/v1/notifications", "/api/v1/timesheets"],
   );
 
   return (
@@ -452,7 +444,6 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
               onClick={() =>
                 signMutation.run({
                   onSuccess: () => {
-                    updateRecent("timesheets", timesheetId, { status: "SUBMITTED" });
                     setLodged(true);
                     toast.push("Timecard lodged");
                   },
@@ -485,7 +476,6 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
               onClick={() =>
                 onsiteMutation.run({
                   onSuccess: () => {
-                    updateRecent("timesheets", timesheetId, { status: "APPROVED" });
                     toast.push("Timecard approved on site");
                     onClose();
                   },
@@ -589,7 +579,7 @@ function ApproveModal({
               consent: true,
             },
           }),
-    ["/api/v1/notifications"],
+    ["/api/v1/notifications", "/api/v1/timesheets"],
   );
 
   const ready =
@@ -610,7 +600,6 @@ function ApproveModal({
             onClick={() =>
               mutation.run({
                 onSuccess: () => {
-                  updateRecent("timesheets", timesheetId, { status: "APPROVED" });
                   toast.push("Timecard approved");
                   onClose();
                 },
@@ -665,7 +654,7 @@ function RejectModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
   const [reason, setReason] = useState("");
   const mutation = useMutation(
     () => api(`/api/v1/timesheets/${timesheetId}/reject`, { method: "POST", body: { reason: reason.trim() } }),
-    ["/api/v1/notifications"],
+    ["/api/v1/notifications", "/api/v1/timesheets"],
   );
   return (
     <Modal
@@ -682,7 +671,6 @@ function RejectModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
             onClick={() =>
               mutation.run({
                 onSuccess: () => {
-                  updateRecent("timesheets", timesheetId, { status: "REJECTED" });
                   toast.push("Timecard rejected — the worker can create a correction");
                   onClose();
                 },
@@ -716,20 +704,14 @@ export function TimesheetsPage() {
   const [rejectFor, setRejectFor] = useState<string | null>(null);
   const [actionId, setActionId] = useState(openParam ?? "");
   const [, forceRender] = useState(0);
+  const { data: myTimecards, loading: myLoading, error: myError, refresh: refreshMine } = useApiQuery<Timesheet[]>("/api/v1/timesheets");
   const { data: pendingApprovals, loading: pendingLoading, error: pendingError, refresh: refreshPending } = useApiQuery<Timesheet[]>(isApprover ? "/api/v1/timesheets/pending-approvals" : null);
-
-  const recents = listRecents("timesheets");
 
   const correct = async (id: string) => {
     try {
-      const corrected = await api<Timesheet>(`/api/v1/timesheets/${id}/correct`, { method: "POST" });
-      rememberRecent("timesheets", {
-        id: corrected.id,
-        label: `${timecardLabel(corrected)} (rev ${corrected.revision})`,
-        sublabel: `${corrected.entries.length} shift${corrected.entries.length === 1 ? "" : "s"} · payroll week ${formatDate(corrected.weekEnding)}`,
-        status: "DRAFT",
-      });
+      await api<Timesheet>(`/api/v1/timesheets/${id}/correct`, { method: "POST" });
       toast.push("Correction draft created — review, sign and resubmit");
+      refreshMine();
       forceRender((n) => n + 1);
     } catch (err) {
       toast.push(err instanceof Error ? err.message : "Correction failed", "error");
@@ -757,10 +739,12 @@ export function TimesheetsPage() {
 
       <section className="card">
         <div className="card-header">
-          <h2>My timecards (this device)</h2>
-          <span className="hint">The API keeps every card; this list tracks the ones handled here.</span>
+          <h2>My timecards</h2>
+          <span className="hint">Only timecards linked to your signed-in worker account are shown here.</span>
         </div>
-        {recents.length === 0 ? (
+        <ErrorAlert error={myError} />
+        {myLoading && <Loading />}
+        {!myLoading && (myTimecards?.length ?? 0) === 0 ? (
           <EmptyState
             title="No timecards yet"
             hint="Create today or yesterday's card, sign it and pick your approver. You can add several days at once when catching up."
@@ -770,7 +754,7 @@ export function TimesheetsPage() {
               </button>
             }
           />
-        ) : (
+        ) : !myLoading && myTimecards && (
           <div className="table-wrap">
             <table className="table">
               <thead>
@@ -782,13 +766,17 @@ export function TimesheetsPage() {
                 </tr>
               </thead>
               <tbody>
-                {recents.map((card) => (
+                {myTimecards.map((card) => (
                   <tr key={card.id}>
                     <td>
-                      <b>{card.label}</b>
+                      <b>{timecardLabel(card)}</b>
                       <div className="mono tiny">{card.id}</div>
                     </td>
-                    <td className="tiny">{card.sublabel}</td>
+                    <td className="tiny">
+                      {card.project ? `${card.project.code} · ${card.project.name}` : card.projectId}
+                      <br />
+                      {card.entries.length} shift{card.entries.length === 1 ? "" : "s"} · payroll week {formatDate(card.weekEnding)}
+                    </td>
                     <td>
                       <StatusBadge status={card.status} />
                     </td>

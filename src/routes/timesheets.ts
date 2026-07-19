@@ -13,6 +13,16 @@ const employeeSignatureBody = z.object({ signedName: z.string().min(2), signatur
 const approverRoles = [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.OPERATIONS_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.FOREMAN];
 
 const routes: FastifyPluginAsync = async app => {
+  app.get("/", { preHandler: authed }, async req => {
+    const worker = await app.prisma.worker.findFirst({ where: { organisationId: req.auth.organisationId, userId: req.auth.userId }, select: { id: true } });
+    if (!worker) return [];
+    return app.prisma.timesheet.findMany({
+      where: { workerId: worker.id, project: { organisationId: req.auth.organisationId } },
+      include: { worker: true, project: true, entries: true, signatures: true, approvalRequest: true },
+      orderBy: [{ weekEnding: "desc" }, { submittedAt: "desc" }, { approvedAt: "desc" }],
+      take: 100,
+    });
+  });
   app.get("/approvers", { preHandler: authed }, req => app.prisma.user.findMany({ where: { organisationId: req.auth.organisationId, active: true, id: { not: req.auth.userId }, role: { in: approverRoles } }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }));
   app.get("/pending-approvals", { preHandler: allow(...approverRoles) }, async req => app.prisma.timesheet.findMany({
     where: { status: Status.SUBMITTED, project: { organisationId: req.auth.organisationId }, approvalRequest: { approverUserId: req.auth.userId, status: ApprovalRequestStatus.PENDING } },
