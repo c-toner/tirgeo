@@ -5,6 +5,7 @@ export type Role =
   | "OWNER"
   | "ADMIN"
   | "PROJECT_MANAGER"
+  | "OPERATIONS_MANAGER"
   | "SUPERVISOR"
   | "SITE_SUPERVISOR"
   | "SITE_ENGINEER"
@@ -94,6 +95,7 @@ export type AccountSection =
   | "SAFETY_DOCUMENTS"
   | "MY_SAFETY"
   | "PLANT"
+  | "PLANT_MANAGEMENT"
   | "TIMESHEETS"
   | "PAYROLL"
   | "COMMERCIAL"
@@ -199,6 +201,8 @@ export interface Plant {
   make?: string | null;
   model?: string | null;
   registration?: string | null;
+  currentProjectId?: string | null;
+  currentProject?: Project | null;
   status: "AVAILABLE" | "IN_USE" | "OUT_OF_SERVICE" | "DEFECT_REPORTED" | string;
   hourMeter?: string | number | null;
   odometerKm?: number | null;

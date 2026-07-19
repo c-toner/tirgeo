@@ -9,7 +9,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
-const managers = allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER);
+const managers = allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.OPERATIONS_MANAGER);
 const routes: FastifyPluginAsync = async app => {
   app.post("/tenders", { preHandler: managers }, async (req, reply) => {
     const b = z.object({ reference: z.string(), title: z.string(), clientName: z.string(), jurisdiction: z.string(), closesAt: z.coerce.date(), scope: z.string().optional(), estimate: z.record(z.any()).optional(), risks: z.array(z.any()).optional(), clarifications: z.array(z.any()).optional(), submissionChecklist: z.array(z.any()).optional() }).parse(req.body);

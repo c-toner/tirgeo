@@ -126,8 +126,8 @@ function TemplateEditor({
             <TextInput value={name} onChange={setName} placeholder="e.g. Excavator Pre-Start" />
           </Field>
         )}
-        <Field label="Plant type (blank = generic)" hint="Only plant of this type will see the template.">
-          <TextInput value={plantType} onChange={setPlantType} placeholder="Excavator" />
+        <Field label="Plant type match (blank = default)" hint="Assets with this plant type automatically use this checklist. Leave blank for the generic fallback.">
+          <TextInput value={plantType} onChange={setPlantType} placeholder="Excavator, tracked machine, quick cut saw" />
         </Field>
       </div>
 

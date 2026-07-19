@@ -139,9 +139,9 @@ const routes: FastifyPluginAsync = async app => {
     return safeUser(user, true);
   });
 
-  app.post("/users", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SITE_SUPERVISOR) }, async (req, reply) => {
+  app.post("/users", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.OPERATIONS_MANAGER, Role.SITE_SUPERVISOR) }, async (req, reply) => {
     const body = createUser.parse(req.body);
-    if ((req.auth.role === Role.PROJECT_MANAGER || req.auth.role === Role.SITE_SUPERVISOR) && !managerCreatableRoles.has(body.role)) {
+    if ((req.auth.role === Role.PROJECT_MANAGER || req.auth.role === Role.OPERATIONS_MANAGER || req.auth.role === Role.SITE_SUPERVISOR) && !managerCreatableRoles.has(body.role)) {
       return reply.code(403).send({ error: "Managers can only create crew and field-support accounts" });
     }
     const user = await app.prisma.$transaction(async tx => {

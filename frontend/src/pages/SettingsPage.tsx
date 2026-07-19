@@ -40,7 +40,7 @@ interface PayrollDetails {
   bpayCustomerReference?: string;
 }
 
-const ROLES: Role[] = ["OWNER", "ADMIN", "PROJECT_MANAGER", "SUPERVISOR", "SITE_SUPERVISOR", "SITE_ENGINEER", "FOREMAN", "SAFETY_MANAGER", "PAYROLL", "WORKER", "SUBCONTRACTOR", "CLIENT_AUDITOR"];
+const ROLES: Role[] = ["OWNER", "ADMIN", "PROJECT_MANAGER", "OPERATIONS_MANAGER", "SUPERVISOR", "SITE_SUPERVISOR", "SITE_ENGINEER", "FOREMAN", "SAFETY_MANAGER", "PAYROLL", "WORKER", "SUBCONTRACTOR", "CLIENT_AUDITOR"];
 const MANAGER_CREATE_ROLES: Role[] = ["SITE_SUPERVISOR", "SITE_ENGINEER", "FOREMAN", "SAFETY_MANAGER", "WORKER", "SUBCONTRACTOR", "CLIENT_AUDITOR"];
 const SECTION_LABELS: Record<AccountSection, string> = {
   DASHBOARD: "Dashboard",
@@ -54,6 +54,7 @@ const SECTION_LABELS: Record<AccountSection, string> = {
   SAFETY_DOCUMENTS: "Safety documents",
   MY_SAFETY: "My sign-ons",
   PLANT: "Plant & pre-starts",
+  PLANT_MANAGEMENT: "Plant management",
   TIMESHEETS: "Timesheets",
   PAYROLL: "Payroll",
   COMMERCIAL: "Commercial",
@@ -76,7 +77,7 @@ function sectionOverrides(sections: AccountSection[]) {
 }
 
 function canCreateUsers(role?: Role) {
-  return role === "OWNER" || role === "ADMIN" || role === "PROJECT_MANAGER" || role === "SITE_SUPERVISOR";
+  return role === "OWNER" || role === "ADMIN" || role === "PROJECT_MANAGER" || role === "OPERATIONS_MANAGER" || role === "SITE_SUPERVISOR";
 }
 
 function AccountForm({ me }: { me: AccountRecord }) {
@@ -204,7 +205,7 @@ function UserAccessModal({ account, onClose }: { account: AccountRecord; onClose
 
 function CreateUserModal({ currentUserRole, onClose }: { currentUserRole: Role; onClose: () => void }) {
   const toast = useToast();
-  const roleOptions = currentUserRole === "PROJECT_MANAGER" || currentUserRole === "SITE_SUPERVISOR" ? MANAGER_CREATE_ROLES : ROLES;
+  const roleOptions = currentUserRole === "PROJECT_MANAGER" || currentUserRole === "OPERATIONS_MANAGER" || currentUserRole === "SITE_SUPERVISOR" ? MANAGER_CREATE_ROLES : ROLES;
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

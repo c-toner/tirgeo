@@ -163,7 +163,7 @@ const routes: FastifyPluginAsync = async app => {
     return reply.send(Readable.fromWeb(result.stream as NodeReadableStream));
   });
 
-  app.delete("/:id", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.SITE_ENGINEER, Role.SAFETY_MANAGER) }, async req => {
+  app.delete("/:id", { preHandler: allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.OPERATIONS_MANAGER, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.SITE_ENGINEER, Role.SAFETY_MANAGER) }, async req => {
     const { id } = uuidParam.parse(req.params);
     const asset = await app.prisma.fileAsset.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId, deletedAt: null } });
     const blob = await import("@vercel/blob");

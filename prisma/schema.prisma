@@ -11,6 +11,7 @@ enum Role {
   OWNER
   ADMIN
   PROJECT_MANAGER
+  OPERATIONS_MANAGER
   SUPERVISOR
   SITE_SUPERVISOR
   SITE_ENGINEER
@@ -174,6 +175,7 @@ enum AccountSection {
   SAFETY_DOCUMENTS
   MY_SAFETY
   PLANT
+  PLANT_MANAGEMENT
   TIMESHEETS
   PAYROLL
   COMMERCIAL
@@ -431,6 +433,7 @@ model Project {
   fileAssets             FileAsset[]
   productionActuals      ProductionActual[]
   plantTelemetryReadings PlantTelemetryReading[]
+  currentPlant           Plant[]                  @relation("PlantCurrentProject")
 
   @@unique([organisationId, code])
 }
@@ -565,17 +568,20 @@ model Plant {
   model             String?
   serialNumber      String?
   registration      String?
+  currentProjectId  String?
   hourMeter         Decimal?                @db.Decimal(12, 1)
   odometerKm        Int?
   status            String                  @default("AVAILABLE")
   nextServiceAt     DateTime?
   nextServiceHours  Decimal?                @db.Decimal(12, 1)
   organisation      Organisation            @relation(fields: [organisationId], references: [id])
+  currentProject    Project?                @relation("PlantCurrentProject", fields: [currentProjectId], references: [id])
   preStarts         PlantPreStart[]
   clearances        PlantClearance[]
   telemetryReadings PlantTelemetryReading[]
 
   @@unique([organisationId, assetNumber])
+  @@index([organisationId, currentProjectId])
 }
 
 model PlantClearance {

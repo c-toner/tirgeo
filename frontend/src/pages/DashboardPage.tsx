@@ -34,7 +34,7 @@ const ALL_DASHBOARD_TILES = Object.keys(DASHBOARD_TILE_LABELS) as DashboardTileI
 function defaultTilesForRole(role?: Role): DashboardTileId[] {
   if (role === "OWNER" || role === "ADMIN") return ["projects", "pendingTimecards", "highRiskHazards", "openIncidents", "activePermits", "pendingDocuments"];
   if (role === "SAFETY_MANAGER") return ["highRiskHazards", "openHazards", "openIncidents", "activePermits", "pendingDocuments", "recentInspections"];
-  if (role === "PROJECT_MANAGER" || role === "SUPERVISOR" || role === "SITE_SUPERVISOR" || role === "SITE_ENGINEER" || role === "FOREMAN") return ["projects", "pendingTimecards", "activePermits", "highRiskHazards", "openHazards", "pendingDocuments"];
+  if (role === "PROJECT_MANAGER" || role === "OPERATIONS_MANAGER" || role === "SUPERVISOR" || role === "SITE_SUPERVISOR" || role === "SITE_ENGINEER" || role === "FOREMAN") return ["projects", "pendingTimecards", "activePermits", "highRiskHazards", "openHazards", "pendingDocuments"];
   return ["projects", "pendingTimecards", "openHazards", "activePermits"];
 }
 
