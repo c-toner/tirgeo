@@ -243,35 +243,32 @@ const routes: FastifyPluginAsync = async app => {
       active: z.boolean().optional(),
       sectionOverrides: z.array(accessOverride).optional(),
     }).parse(req.body);
-    const userId = await app.prisma.$transaction(async tx => {
-      const current = await tx.user.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId }, select: { id: true, worker: { select: { id: true } } } });
-      await tx.user.update({
-        where: { id: current.id },
-        data: {
-          name: body.name,
-          email: body.email?.toLowerCase(),
-          phone: body.phone,
-          address: body.address === undefined ? undefined : body.address as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
-          role: body.role,
-          active: body.active,
-        },
-      });
-      if (body.payrollDetails !== undefined) {
-        if (!current.worker) throw Object.assign(new Error("A linked worker record is required before payroll details can be saved"), { statusCode: 409 });
-        await tx.worker.update({ where: { id: current.worker.id }, data: { payrollDetailsEncrypted: body.payrollDetails === null ? null : encryptJson(body.payrollDetails) } });
-      }
-      if (body.sectionOverrides) {
-        await Promise.all(body.sectionOverrides.map(override =>
-          tx.userSectionAccess.upsert({
-            where: { userId_section: { userId: current.id, section: override.section } },
-            create: { userId: current.id, section: override.section, enabled: override.enabled, grantedById: req.auth.userId },
-            update: { enabled: override.enabled, grantedById: req.auth.userId },
-          }),
-        ));
-      }
-      return current.id;
+    const current = await app.prisma.user.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId }, select: { id: true, worker: { select: { id: true } } } });
+    await app.prisma.user.update({
+      where: { id: current.id },
+      data: {
+        name: body.name,
+        email: body.email?.toLowerCase(),
+        phone: body.phone,
+        address: body.address === undefined ? undefined : body.address as Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput,
+        role: body.role,
+        active: body.active,
+      },
     });
-    const user = await findAccountUser(app, req.auth.organisationId, userId);
+    if (body.payrollDetails !== undefined) {
+      if (!current.worker) throw Object.assign(new Error("A linked worker record is required before payroll details can be saved"), { statusCode: 409 });
+      await app.prisma.worker.update({ where: { id: current.worker.id }, data: { payrollDetailsEncrypted: body.payrollDetails === null ? null : encryptJson(body.payrollDetails) } });
+    }
+    if (body.sectionOverrides?.length) {
+      await app.prisma.$transaction(body.sectionOverrides.map(override =>
+        app.prisma.userSectionAccess.upsert({
+          where: { userId_section: { userId: current.id, section: override.section } },
+          create: { userId: current.id, section: override.section, enabled: override.enabled, grantedById: req.auth.userId },
+          update: { enabled: override.enabled, grantedById: req.auth.userId },
+        }),
+      ));
+    }
+    const user = await findAccountUser(app, req.auth.organisationId, current.id);
     await audit(app, req, "UPDATE_ACCESS", "User", id, { role: body.role, active: body.active, sectionOverrides: body.sectionOverrides, payrollDetailsUpdated: body.payrollDetails !== undefined });
     return safeUser(user, canViewPayrollDetails(req.auth.role));
   });
