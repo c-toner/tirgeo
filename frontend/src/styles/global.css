@@ -935,6 +935,98 @@ table.table {
   padding: 7px 8px;
 }
 
+/* ---------- Chainage ---------- */
+
+.chainage-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  gap: 14px;
+}
+
+.chainage-map {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  min-height: 260px;
+  overflow: hidden;
+}
+
+.chainage-map.empty-map {
+  color: var(--ink-3);
+  display: grid;
+  place-items: center;
+}
+
+.chainage-map svg {
+  display: block;
+  height: auto;
+  width: 100%;
+}
+
+.chainage-line {
+  fill: none;
+  stroke: var(--ink-2);
+  stroke-linecap: round;
+  stroke-width: 8;
+}
+
+.chainage-tick {
+  stroke: var(--line-strong);
+  stroke-width: 2;
+}
+
+.chainage-map text {
+  fill: var(--ink-3);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.chainage-marker {
+  fill: var(--primary);
+  stroke: var(--surface);
+  stroke-width: 3;
+}
+
+.chainage-marker.closed,
+.chainage-marker.actioned {
+  fill: var(--good);
+}
+
+.chainage-marker.in_review,
+.chainage-marker.priced {
+  fill: var(--warning);
+}
+
+.chainage-map-foot {
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+}
+
+.chainage-list {
+  display: grid;
+  gap: 8px;
+}
+
+.chainage-observation {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px;
+}
+
+.chainage-observation > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 /* ---------- Tabs & filters ---------- */
 
 .tabs {
@@ -1488,7 +1580,9 @@ table.table {
   }
   .detail-grid,
   .answer-row,
-  .prestart-photo-grid {
+  .prestart-photo-grid,
+  .chainage-grid,
+  .chainage-observation {
     grid-template-columns: 1fr;
   }
   .answer-pill {

@@ -20,6 +20,7 @@ import fieldRoutes from "./routes/field.js";
 import commercialRoutes from "./routes/commercial.js";
 import syncRoutes from "./routes/sync.js";
 import payrollRoutes from "./routes/payroll.js";
+import chainageRoutes from "./routes/chainage.js";
 import notificationRoutes from "./routes/notifications.js";
 import fileRoutes from "./routes/files.js";
 import workerRoutes from "./routes/workers.js";
@@ -73,6 +74,7 @@ export async function buildApp() {
   await app.register(commercialRoutes, { prefix: "/api/v1/commercial" });
   await app.register(syncRoutes, { prefix: "/api/v1/sync" });
   await app.register(payrollRoutes, { prefix: "/api/v1/payroll" });
+  await app.register(chainageRoutes, { prefix: "/api/v1/chainage" });
   await app.register(notificationRoutes, { prefix: "/api/v1/notifications" });
   await app.register(fileRoutes, { prefix: "/api/v1/files" });
   await app.register(workerRoutes, { prefix: "/api/v1/workers" });

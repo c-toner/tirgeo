@@ -177,6 +177,7 @@ enum AccountSection {
   PLANT
   PLANT_MANAGEMENT
   COMPLETED_PRE_STARTS
+  CHAINAGE
   TIMESHEETS
   PAYROLL
   COMMERCIAL
@@ -336,6 +337,7 @@ model User {
   grantedSectionAccess       UserSectionAccess[]        @relation("UserSectionAccessGrantedBy")
   timesheetApprovalRequests  TimesheetApprovalRequest[] @relation("TimesheetApprover")
   notifications              Notification[]
+  chainageObservations       ChainageObservation[]       @relation("ChainageObservationCreatedBy")
 
   @@unique([organisationId, email])
 }
@@ -435,8 +437,56 @@ model Project {
   productionActuals      ProductionActual[]
   plantTelemetryReadings PlantTelemetryReading[]
   currentPlant           Plant[]                  @relation("PlantCurrentProject")
+  chainageAlignments     ChainageAlignment[]
+  chainageObservations   ChainageObservation[]
 
   @@unique([organisationId, code])
+}
+
+model ChainageAlignment {
+  id           String                 @id @default(uuid())
+  projectId    String
+  name         String
+  roadRef      String?
+  direction    String?
+  startLabel   String?
+  endLabel     String?
+  startChainageM Decimal              @db.Decimal(12, 1)
+  endChainageM   Decimal              @db.Decimal(12, 1)
+  geometry     Json?
+  notes        String?
+  createdAt    DateTime               @default(now())
+  project      Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  observations ChainageObservation[]
+
+  @@index([projectId, name])
+}
+
+model ChainageObservation {
+  id           String    @id @default(uuid())
+  projectId    String
+  alignmentId  String
+  chainageM    Decimal   @db.Decimal(12, 1)
+  side         String    @default("CENTRE")
+  offsetM      Decimal?  @db.Decimal(8, 2)
+  latitude     Decimal?  @db.Decimal(10, 7)
+  longitude    Decimal?  @db.Decimal(10, 7)
+  gpsAccuracyM Decimal?  @db.Decimal(8, 2)
+  category     String    @default("ISSUE")
+  title        String
+  description  String?
+  status       String    @default("OPEN")
+  photoIds     String[]  @default([])
+  observedAt   DateTime  @default(now())
+  createdAt    DateTime  @default(now())
+  createdById  String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  alignment    ChainageAlignment @relation(fields: [alignmentId], references: [id], onDelete: Cascade)
+  createdBy    User      @relation("ChainageObservationCreatedBy", fields: [createdById], references: [id])
+
+  @@index([projectId, observedAt])
+  @@index([alignmentId, chainageM])
+  @@index([status])
 }
 
 model CostCode {

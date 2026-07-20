@@ -46,6 +46,7 @@ const NAV: NavGroup[] = [
     items: [
       { to: "/plant", label: "Plant & pre-starts", icon: "truck", section: "PLANT" },
       { to: "/plant/completed-pre-starts", label: "Completed pre-starts", icon: "clipboard", section: "COMPLETED_PRE_STARTS" },
+      { to: "/chainage", label: "Chainage", icon: "projects", section: "CHAINAGE" },
       { to: "/timesheets", label: "Timesheets", icon: "clock", section: "TIMESHEETS" },
       {
         to: "/payroll",

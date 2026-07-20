@@ -21,6 +21,7 @@ import { PayrollPage } from "./pages/payroll/PayrollPage.tsx";
 import { CommercialPage } from "./pages/commercial/CommercialPage.tsx";
 import { TenderDetailPage } from "./pages/commercial/TenderDetailPage.tsx";
 import { SettingsPage } from "./pages/SettingsPage.tsx";
+import { ChainagePage } from "./pages/ChainagePage.tsx";
 import type { AccountSection } from "./lib/types.ts";
 
 const ROUTE_SECTIONS: Array<[string, AccountSection]> = [
@@ -36,6 +37,7 @@ const ROUTE_SECTIONS: Array<[string, AccountSection]> = [
   ["/plant/completed-pre-starts", "COMPLETED_PRE_STARTS"],
   ["/plant/pre-starts", "PLANT"],
   ["/plant", "PLANT"],
+  ["/chainage", "CHAINAGE"],
   ["/timesheets", "TIMESHEETS"],
   ["/payroll", "PAYROLL"],
   ["/commercial", "COMMERCIAL"],
@@ -88,6 +90,8 @@ function Routes() {
       return <CompletedPreStartsPage />;
     case "/plant/templates":
       return <TemplatesPage />;
+    case "/chainage":
+      return <ChainagePage />;
     case "/field/daily-report":
       return <DailyReportPage />;
     case "/timesheets":

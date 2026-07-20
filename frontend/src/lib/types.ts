@@ -97,6 +97,7 @@ export type AccountSection =
   | "PLANT"
   | "PLANT_MANAGEMENT"
   | "COMPLETED_PRE_STARTS"
+  | "CHAINAGE"
   | "TIMESHEETS"
   | "PAYROLL"
   | "COMMERCIAL"
@@ -146,6 +147,46 @@ export interface Project {
   startDate?: string | null;
   endDate?: string | null;
   createdAt?: string;
+}
+
+export interface ChainageAlignment {
+  id: string;
+  projectId: string;
+  name: string;
+  roadRef?: string | null;
+  direction?: string | null;
+  startLabel?: string | null;
+  endLabel?: string | null;
+  startChainageM: string | number;
+  endChainageM: string | number;
+  geometry?: { type: "LineString"; coordinates: [number, number][] } | null;
+  notes?: string | null;
+  createdAt?: string;
+  project?: Pick<Project, "id" | "code" | "name">;
+  _count?: { observations: number };
+}
+
+export interface ChainageObservation {
+  id: string;
+  projectId: string;
+  alignmentId: string;
+  chainageM: string | number;
+  side: "LEFT" | "CENTRE" | "RIGHT" | "BOTH" | "UNKNOWN";
+  offsetM?: string | number | null;
+  latitude?: string | number | null;
+  longitude?: string | number | null;
+  gpsAccuracyM?: string | number | null;
+  category: "ISSUE" | "DEFECT" | "SCOPE" | "QUOTE" | "PHOTO_RECORD" | "ACCESS" | "UTILITY" | "DRAINAGE";
+  title: string;
+  description?: string | null;
+  status: "OPEN" | "IN_REVIEW" | "PRICED" | "ACTIONED" | "CLOSED";
+  photoIds: string[];
+  observedAt: string;
+  createdAt: string;
+  alignment: ChainageAlignment;
+  project?: Pick<Project, "id" | "code" | "name">;
+  createdBy?: { id: string; name: string; role: Role };
+  photos?: FileAsset[];
 }
 
 export interface ApproverSummary {
