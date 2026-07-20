@@ -385,7 +385,7 @@ export function SettingsPage() {
       <section className="card card-pad stack">
         <div><h2>My worker record</h2><p className="muted">Timecards, plant pre-starts and action ownership use worker records.</p></div>
         <div className="row" style={{ alignItems: "flex-end" }}>
-          <Field label="Worker"><WorkerSelect value={workerId} onChange={setWorkerId} allowEmpty autoSelectCurrent={false} emptyLabel="Use linked worker" /></Field>
+          <Field label="Worker"><WorkerSelect value={workerId} onChange={setWorkerId} allowEmpty emptyLabel="Use linked worker" /></Field>
           <button className="btn btn-primary" style={{ marginBottom: 4 }} onClick={() => { setMyWorkerId(workerId); toast.push(workerId.trim() ? "Worker preference saved on this device" : "Worker preference cleared"); }}>Save</button>
         </div>
       </section>

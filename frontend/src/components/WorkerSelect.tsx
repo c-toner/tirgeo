@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useAuth } from "../lib/auth.tsx";
 import type { WorkerSummary } from "../lib/types.ts";
 import { useApiQuery } from "../lib/useApi.ts";
-import { Icon, TextInput } from "./ui.tsx";
+import { Icon } from "./ui.tsx";
 
 function workerName(worker: WorkerSummary): string {
   return `${worker.firstName} ${worker.lastName}`.trim();
@@ -48,22 +48,70 @@ export function WorkerSelect({
   const { user } = useAuth();
   const { data } = useApiQuery<WorkerSummary[]>("/api/v1/workers");
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const optionsId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const didAutoSelectRef = useRef(false);
   const currentWorker = data?.find((worker) => worker.isCurrentUser) ?? user?.worker ?? null;
   const currentWorkerId = currentWorker?.id;
   const workers = useMemo(() => sortWorkers(data ?? [], currentWorkerId), [data, currentWorkerId]);
   const selected = workers.find((worker) => worker.id === value) ?? (currentWorker?.id === value ? currentWorker : null);
   const filtered = query ? workers.filter((worker) => matches(worker, query)) : workers;
+  const inputValue = open ? query : selected ? workerLabel(selected) : "";
 
   useEffect(() => {
-    if (autoSelectCurrent && !allowEmpty && !value && currentWorkerId) onChange(currentWorkerId);
-  }, [allowEmpty, autoSelectCurrent, currentWorkerId, onChange, value]);
+    if (autoSelectCurrent && !didAutoSelectRef.current && !value && currentWorkerId) {
+      didAutoSelectRef.current = true;
+      onChange(currentWorkerId);
+    }
+  }, [autoSelectCurrent, currentWorkerId, onChange, value]);
+
+  useEffect(() => {
+    const closeIfOutside = (event: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("pointerdown", closeIfOutside);
+    return () => document.removeEventListener("pointerdown", closeIfOutside);
+  }, []);
 
   return (
-    <div className="worker-select">
-      <TextInput value={query} onChange={setQuery} placeholder={selected ? workerLabel(selected) : placeholder} />
-      <div className="worker-options" role="listbox">
+    <div className="worker-select" ref={rootRef}>
+      <input
+        className="input"
+        type="text"
+        value={inputValue}
+        placeholder={open || !selected ? placeholder : undefined}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={optionsId}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+            setQuery("");
+          }
+        }}
+      />
+      {open && <div className="worker-options" id={optionsId} role="listbox">
         {allowEmpty && (
-          <button type="button" className={!value ? "active" : ""} onClick={() => onChange("")}>
+          <button
+            type="button"
+            className={!value ? "active" : ""}
+            onClick={() => {
+              onChange("");
+              setOpen(false);
+              setQuery("");
+            }}
+          >
             <span>{emptyLabel}</span>
           </button>
         )}
@@ -74,6 +122,7 @@ export function WorkerSelect({
             className={worker.id === value ? "active" : ""}
             onClick={() => {
               onChange(worker.id);
+              setOpen(false);
               setQuery("");
             }}
           >
@@ -88,7 +137,7 @@ export function WorkerSelect({
           </button>
         ))}
         {filtered.length === 0 && <div className="worker-empty">No workers match that search.</div>}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -105,14 +154,28 @@ export function WorkerMultiSelect({
   const { user } = useAuth();
   const { data } = useApiQuery<WorkerSummary[]>("/api/v1/workers");
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const optionsId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
   const currentWorkerId = data?.find((worker) => worker.isCurrentUser)?.id ?? user?.worker?.id;
   const workers = useMemo(() => sortWorkers(data ?? [], currentWorkerId), [data, currentWorkerId]);
   const selected = workers.filter((worker) => value.includes(worker.id));
   const filtered = (query ? workers.filter((worker) => matches(worker, query)) : workers).filter((worker) => !value.includes(worker.id));
   const remove = (id: string) => onChange(value.filter((workerId) => workerId !== id));
 
+  useEffect(() => {
+    const closeIfOutside = (event: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(event.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    };
+    document.addEventListener("pointerdown", closeIfOutside);
+    return () => document.removeEventListener("pointerdown", closeIfOutside);
+  }, []);
+
   return (
-    <div className="worker-select">
+    <div className="worker-select" ref={rootRef}>
       {selected.length > 0 && (
         <div className="worker-chips">
           {selected.map((worker) => (
@@ -123,14 +186,36 @@ export function WorkerMultiSelect({
           ))}
         </div>
       )}
-      <TextInput value={query} onChange={setQuery} placeholder={placeholder} />
-      <div className="worker-options" role="listbox">
+      <input
+        className="input"
+        type="text"
+        value={query}
+        placeholder={placeholder}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={optionsId}
+        onFocus={() => setOpen(true)}
+        onClick={() => setOpen(true)}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setOpen(true);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            setOpen(false);
+            setQuery("");
+          }
+        }}
+      />
+      {open && <div className="worker-options" id={optionsId} role="listbox">
         {filtered.map((worker) => (
           <button
             key={worker.id}
             type="button"
             onClick={() => {
               onChange([...value, worker.id]);
+              setOpen(false);
               setQuery("");
             }}
           >
@@ -145,7 +230,7 @@ export function WorkerMultiSelect({
           </button>
         ))}
         {filtered.length === 0 && <div className="worker-empty">No more workers match that search.</div>}
-      </div>
+      </div>}
     </div>
   );
 }

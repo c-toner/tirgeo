@@ -100,7 +100,7 @@ function ConnectionCard({ provider }: { provider: AccountingProvider }) {
           <b style={{ fontSize: 13.5 }}>Employee mapping</b>
           <div className="row" style={{ alignItems: "flex-end" }}>
             <Field label="Worker">
-              <WorkerSelect value={workerId} onChange={setWorkerId} allowEmpty autoSelectCurrent={false} emptyLabel="Select a worker" />
+              <WorkerSelect value={workerId} onChange={setWorkerId} allowEmpty emptyLabel="Select a worker" />
             </Field>
             <Field label={`${provider} employee ID`}>
               <TextInput value={externalEmployeeId} onChange={setExternalEmployeeId} mono />
