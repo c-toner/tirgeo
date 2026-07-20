@@ -55,6 +55,7 @@ const SECTION_LABELS: Record<AccountSection, string> = {
   MY_SAFETY: "My sign-ons",
   PLANT: "Plant & pre-starts",
   PLANT_MANAGEMENT: "Plant management",
+  COMPLETED_PRE_STARTS: "Completed pre-starts",
   TIMESHEETS: "Timesheets",
   PAYROLL: "Payroll",
   COMMERCIAL: "Commercial",

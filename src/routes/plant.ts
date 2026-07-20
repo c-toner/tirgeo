@@ -9,6 +9,15 @@ import { defectQuestionIds, preStartSections, validatePreStartAnswers } from "..
 const plantManagers = [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.OPERATIONS_MANAGER];
 const plantTelemetryManagers = [...plantManagers, Role.SUPERVISOR, Role.SITE_SUPERVISOR, Role.SITE_ENGINEER];
 const plantClearers = [...plantManagers, Role.SAFETY_MANAGER];
+const uuidParam = z.object({ id: z.string().uuid() });
+
+function defectPhotoIds(defects: unknown): string[] {
+  if (!Array.isArray(defects)) return [];
+  return defects.flatMap((defect) => {
+    if (!defect || typeof defect !== "object" || !("photoIds" in defect) || !Array.isArray(defect.photoIds)) return [];
+    return defect.photoIds.filter((id: unknown): id is string => typeof id === "string");
+  });
+}
 
 const routes: FastifyPluginAsync = async app => {
   app.get("/pre-start-templates", { preHandler: authed }, async req => {
@@ -62,6 +71,68 @@ const routes: FastifyPluginAsync = async app => {
       app.prisma.plantPreStart.count({ where }),
     ]);
     return { items, page: q.page, pageSize: q.pageSize, total };
+  });
+  app.get("/completed-pre-starts", { preHandler: authed }, async (req, reply) => {
+    if (!req.auth.sections.includes(AccountSection.COMPLETED_PRE_STARTS)) return reply.code(403).send({ error: "Forbidden" });
+    const q = z.object({
+      page: z.coerce.number().int().min(1).default(1),
+      pageSize: z.coerce.number().int().min(1).max(50).default(10),
+      search: z.string().trim().optional(),
+      result: z.nativeEnum(InspectionResult).optional(),
+    }).parse(req.query);
+    const where = {
+      result: q.result,
+      plant: { organisationId: req.auth.organisationId },
+      ...(q.search
+        ? {
+            OR: [
+              { worker: { firstName: { contains: q.search, mode: "insensitive" as const } } },
+              { worker: { lastName: { contains: q.search, mode: "insensitive" as const } } },
+              { worker: { employeeNumber: { contains: q.search, mode: "insensitive" as const } } },
+              { plant: { assetNumber: { contains: q.search, mode: "insensitive" as const } } },
+              { plant: { type: { contains: q.search, mode: "insensitive" as const } } },
+              { plant: { make: { contains: q.search, mode: "insensitive" as const } } },
+              { plant: { model: { contains: q.search, mode: "insensitive" as const } } },
+            ],
+          }
+        : {}),
+    };
+    const [items, total] = await Promise.all([
+      app.prisma.plantPreStart.findMany({
+        where,
+        include: {
+          plant: { select: { id: true, assetNumber: true, type: true, make: true, model: true, currentProject: { select: { id: true, code: true, name: true } } } },
+          worker: { select: { id: true, employeeNumber: true, firstName: true, lastName: true, classification: true } },
+        },
+        orderBy: { inspectedAt: "desc" },
+        skip: (q.page - 1) * q.pageSize,
+        take: q.pageSize,
+      }),
+      app.prisma.plantPreStart.count({ where }),
+    ]);
+    return { items, page: q.page, pageSize: q.pageSize, total };
+  });
+  app.get("/pre-starts/:id", { preHandler: authed }, async (req, reply) => {
+    const { id } = uuidParam.parse(req.params);
+    const preStart = await app.prisma.plantPreStart.findFirstOrThrow({
+      where: { id, plant: { organisationId: req.auth.organisationId } },
+      include: {
+        plant: { include: { currentProject: true } },
+        worker: { select: { id: true, userId: true, employeeNumber: true, firstName: true, lastName: true, classification: true } },
+        checklistTemplate: { select: { id: true, name: true, version: true, plantType: true, sections: true } },
+      },
+    });
+    const canViewAll = req.auth.sections.includes(AccountSection.COMPLETED_PRE_STARTS);
+    if (!canViewAll && preStart.worker.userId !== req.auth.userId) return reply.code(403).send({ error: "Forbidden" });
+    const photoIds = [...new Set([...preStart.photoIds, ...defectPhotoIds(preStart.defects)])];
+    const [photos, project] = await Promise.all([
+      photoIds.length
+        ? app.prisma.fileAsset.findMany({ where: { id: { in: photoIds }, organisationId: req.auth.organisationId, deletedAt: null }, orderBy: { createdAt: "asc" } })
+        : [],
+      preStart.projectId ? app.prisma.project.findFirst({ where: { id: preStart.projectId, organisationId: req.auth.organisationId }, select: { id: true, code: true, name: true } }) : null,
+    ]);
+    const photosById = new Map(photos.map((photo) => [photo.id, photo]));
+    return { ...preStart, project, photos: photoIds.map((photoId) => photosById.get(photoId)).filter(Boolean) };
   });
   app.post("/", { preHandler: allowSection(AccountSection.PLANT_MANAGEMENT, ...plantManagers) }, async (req, reply) => {
     const body = z.object({ assetNumber: z.string(), type: z.string(), make: z.string().optional(), model: z.string().optional(), serialNumber: z.string().optional(), registration: z.string().optional(), currentProjectId: z.string().uuid().optional(), nextServiceAt: z.coerce.date().optional(), nextServiceHours: z.number().optional() }).parse(req.body);

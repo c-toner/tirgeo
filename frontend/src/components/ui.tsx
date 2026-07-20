@@ -257,6 +257,10 @@ const STATUS_TONES: Record<string, string> = {
   CONFIGURED: "badge-primary",
   CONNECTED: "badge-good",
   PENDING: "badge-warning",
+  LOW: "badge-good",
+  MEDIUM: "badge-warning",
+  HIGH: "badge-serious",
+  CRITICAL: "badge-critical",
 };
 
 export function StatusBadge({ status }: { status?: string | null }) {

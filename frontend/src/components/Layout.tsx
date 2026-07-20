@@ -45,6 +45,7 @@ const NAV: NavGroup[] = [
     title: "Resources",
     items: [
       { to: "/plant", label: "Plant & pre-starts", icon: "truck", section: "PLANT" },
+      { to: "/plant/completed-pre-starts", label: "Completed pre-starts", icon: "clipboard", section: "COMPLETED_PRE_STARTS" },
       { to: "/timesheets", label: "Timesheets", icon: "clock", section: "TIMESHEETS" },
       {
         to: "/payroll",
@@ -162,6 +163,23 @@ export function Layout({ title, children, actions }: { title: string; children: 
   useEffect(() => {
     document.title = `${title} · TirGeo`;
   }, [title]);
+
+  useEffect(() => {
+    const setMobileViewportOffset = () => {
+      const viewport = window.visualViewport;
+      const bottomOffset = viewport ? Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop) : 0;
+      document.documentElement.style.setProperty("--visual-viewport-bottom", `${bottomOffset}px`);
+    };
+    setMobileViewportOffset();
+    window.visualViewport?.addEventListener("resize", setMobileViewportOffset);
+    window.visualViewport?.addEventListener("scroll", setMobileViewportOffset);
+    window.addEventListener("resize", setMobileViewportOffset);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", setMobileViewportOffset);
+      window.visualViewport?.removeEventListener("scroll", setMobileViewportOffset);
+      window.removeEventListener("resize", setMobileViewportOffset);
+    };
+  }, []);
 
   useEffect(() => {
     setMobileMenu(false);

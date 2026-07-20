@@ -13,6 +13,8 @@ import { SafetyDocsPage } from "./pages/hseq/SafetyDocsPage.tsx";
 import { MySafetyPage } from "./pages/hseq/MySafetyPage.tsx";
 import { PlantPage } from "./pages/plant/PlantPage.tsx";
 import { TemplatesPage } from "./pages/plant/TemplatesPage.tsx";
+import { CompletedPreStartsPage } from "./pages/plant/CompletedPreStartsPage.tsx";
+import { PreStartDetailPage } from "./pages/plant/PreStartDetailPage.tsx";
 import { DailyReportPage } from "./pages/field/DailyReportPage.tsx";
 import { TimesheetsPage } from "./pages/timesheets/TimesheetsPage.tsx";
 import { PayrollPage } from "./pages/payroll/PayrollPage.tsx";
@@ -31,6 +33,8 @@ const ROUTE_SECTIONS: Array<[string, AccountSection]> = [
   ["/hseq/actions", "CORRECTIVE_ACTIONS"],
   ["/hseq/documents", "SAFETY_DOCUMENTS"],
   ["/hseq/my-safety", "MY_SAFETY"],
+  ["/plant/completed-pre-starts", "COMPLETED_PRE_STARTS"],
+  ["/plant/pre-starts", "PLANT"],
   ["/plant", "PLANT"],
   ["/timesheets", "TIMESHEETS"],
   ["/payroll", "PAYROLL"],
@@ -49,9 +53,14 @@ function Routes() {
 
   if (!user) return <LoginPage />;
   if (clean === "/login") return <LoginPage />;
-  if (!user.sections.includes(routeSection(clean))) return <DashboardPage />;
 
   const tenderMatch = matchPath("/commercial/tenders/:id", clean);
+  const preStartMatch = matchPath("/plant/pre-starts/:id", clean);
+  if (preStartMatch) {
+    if (!user.sections.includes("PLANT") && !user.sections.includes("COMPLETED_PRE_STARTS")) return <DashboardPage />;
+    return <PreStartDetailPage preStartId={preStartMatch.id} />;
+  }
+  if (!user.sections.includes(routeSection(clean))) return <DashboardPage />;
   if (tenderMatch) return <TenderDetailPage tenderId={tenderMatch.id} />;
 
   switch (clean) {
@@ -75,6 +84,8 @@ function Routes() {
       return <MySafetyPage />;
     case "/plant":
       return <PlantPage />;
+    case "/plant/completed-pre-starts":
+      return <CompletedPreStartsPage />;
     case "/plant/templates":
       return <TemplatesPage />;
     case "/field/daily-report":

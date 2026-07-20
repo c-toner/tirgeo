@@ -556,7 +556,7 @@ function WorkerPreStartHistory({
               const makeModel = [plant.make, plant.model].filter(Boolean).join(" ") || "Make / model not recorded";
               const location = plant.currentProject ? `${plant.currentProject.code} · ${plant.currentProject.name}` : "Location not recorded";
               return (
-                <article className="prestart-history-row" key={item.id}>
+                <Link className="prestart-history-row" key={item.id} to={`/plant/pre-starts/${item.id}`}>
                   <div>
                     <b className="mono">{plant.assetNumber}</b>
                     <span>{plant.type}</span>
@@ -573,7 +573,7 @@ function WorkerPreStartHistory({
                     <span className="tiny">{formatDateTime(item.inspectedAt)}</span>
                     <StatusBadge status={item.result} />
                   </div>
-                </article>
+                </Link>
               );
             })}
           </div>

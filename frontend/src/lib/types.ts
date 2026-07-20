@@ -96,6 +96,7 @@ export type AccountSection =
   | "MY_SAFETY"
   | "PLANT"
   | "PLANT_MANAGEMENT"
+  | "COMPLETED_PRE_STARTS"
   | "TIMESHEETS"
   | "PAYROLL"
   | "COMMERCIAL"
@@ -279,6 +280,17 @@ export interface PlantPreStartSummary {
   result: InspectionResult;
   defects?: PreStartDefect[] | null;
   plant: Pick<Plant, "id" | "assetNumber" | "type" | "make" | "model"> & { currentProject?: Pick<Project, "id" | "code" | "name"> | null };
+  worker?: Pick<WorkerSummary, "id" | "employeeNumber" | "firstName" | "lastName" | "classification">;
+}
+
+export interface PlantPreStartDetail extends PlantPreStartSummary {
+  project?: Pick<Project, "id" | "code" | "name"> | null;
+  answers: Record<string, boolean | string | number | null>;
+  checklistTemplate?: Pick<PreStartTemplate, "id" | "name" | "version" | "plantType" | "sections"> | null;
+  plant: Plant;
+  worker: Pick<WorkerSummary, "id" | "employeeNumber" | "firstName" | "lastName" | "classification">;
+  photos: FileAsset[];
+  signature?: string | null;
 }
 
 export interface PaginatedResult<T> {
