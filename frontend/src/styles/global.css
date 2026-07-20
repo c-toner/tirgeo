@@ -939,70 +939,183 @@ table.table {
 
 .chainage-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
+  grid-template-columns: minmax(0, 0.9fr) minmax(360px, 1.1fr);
   gap: 14px;
 }
 
-.chainage-map {
+.work-map-shell {
+  display: grid;
+  gap: 8px;
+}
+
+.work-map {
+  aspect-ratio: 16 / 9;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: 8px;
-  min-height: 260px;
+  cursor: crosshair;
+  min-height: 380px;
   overflow: hidden;
+  position: relative;
+  user-select: none;
 }
 
-.chainage-map.empty-map {
-  color: var(--ink-3);
-  display: grid;
-  place-items: center;
+.work-map-tile {
+  height: 256px;
+  pointer-events: none;
+  position: absolute;
+  width: 256px;
 }
 
-.chainage-map svg {
-  display: block;
-  height: auto;
-  width: 100%;
+.work-map-overlay {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
 }
 
-.chainage-line {
+.work-map-alignment {
   fill: none;
-  stroke: var(--ink-2);
+  stroke: var(--primary);
   stroke-linecap: round;
-  stroke-width: 8;
+  stroke-linejoin: round;
+  stroke-width: 5;
+  opacity: 0.85;
 }
 
-.chainage-tick {
-  stroke: var(--line-strong);
-  stroke-width: 2;
+.work-map-marker,
+.work-map-draft-marker {
+  background: #050505;
+  border: 2px solid #050505;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  font-family: inherit;
+  left: 0;
+  max-width: 150px;
+  min-width: 92px;
+  padding: 5px 7px;
+  pointer-events: auto;
+  position: absolute;
+  text-align: left;
+  top: 0;
+  transform: translate(-50%, calc(-100% - 12px));
+  z-index: 4;
 }
 
-.chainage-map text {
-  fill: var(--ink-3);
+.work-map-marker::after,
+.work-map-draft-marker::after {
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-top: 10px solid currentColor;
+  bottom: -10px;
+  color: inherit;
+  content: "";
+  left: calc(50% - 8px);
+  position: absolute;
+}
+
+.work-map-marker b,
+.work-map-draft-marker {
+  display: block;
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 850;
+  line-height: 1.05;
 }
 
-.chainage-marker {
-  fill: var(--primary);
-  stroke: var(--surface);
-  stroke-width: 3;
+.work-map-marker span {
+  color: rgba(255, 255, 255, 0.78);
+  display: block;
+  font-size: 11px;
+  line-height: 1.15;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.chainage-marker.closed,
-.chainage-marker.actioned {
-  fill: var(--good);
+.work-map-marker:hover {
+  filter: brightness(1.08);
+  transform: translate(-50%, calc(-100% - 14px));
 }
 
-.chainage-marker.in_review,
-.chainage-marker.priced {
-  fill: var(--warning);
-}
-
-.chainage-map-foot {
-  border-top: 1px solid var(--line);
+.work-map-cluster {
+  align-items: center;
+  background: #d91414;
+  border: 3px solid rgba(255, 255, 255, 0.86);
+  border-radius: 999px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+  color: #fff;
+  cursor: pointer;
   display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 900;
+  height: 44px;
+  justify-content: center;
+  left: 0;
+  min-width: 44px;
+  padding: 0 10px;
+  position: absolute;
+  top: 0;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+}
+
+.work-map-cluster:hover {
+  background: #f02a2a;
+}
+
+.work-map-marker.closed,
+.work-map-marker.actioned {
+  background: var(--good-text);
+  border-color: var(--good-text);
+}
+
+.work-map-marker.in_review,
+.work-map-marker.priced {
+  background: var(--warning-text);
+  border-color: var(--warning-text);
+}
+
+.work-map-marker.open,
+.work-map-marker.defect {
+  background: #110101;
+  border-color: var(--critical);
+  color: #ff2f2f;
+}
+
+.work-map-draft-marker {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  min-width: 58px;
+}
+
+.work-map-attribution {
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 4px;
+  bottom: 6px;
+  color: #222;
+  font-size: 11px;
+  padding: 2px 5px;
+  position: absolute;
+  right: 6px;
+  z-index: 5;
+}
+
+.work-map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.work-map-controls .btn-icon {
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.work-map-caption {
+  color: var(--ink-3);
+  font-size: 12.5px;
 }
 
 .chainage-list {
@@ -1011,13 +1124,24 @@ table.table {
 }
 
 .chainage-observation {
+  background: transparent;
   border: 1px solid var(--line);
   border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
   display: grid;
+  font: inherit;
   grid-template-columns: 120px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
   padding: 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.chainage-observation:hover {
+  background: color-mix(in srgb, var(--surface-2) 64%, transparent);
+  border-color: var(--line-strong);
 }
 
 .chainage-observation > div {
@@ -1025,6 +1149,62 @@ table.table {
   display: flex;
   flex-direction: column;
   gap: 3px;
+}
+
+.chainage-detail-tabs {
+  margin-bottom: 14px;
+}
+
+.chainage-detail-hero {
+  align-items: flex-start;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.chainage-detail-hero > div {
+  display: grid;
+  gap: 3px;
+}
+
+.chainage-detail-hero b {
+  font-size: 26px;
+  line-height: 1;
+}
+
+.chainage-detail-grid div,
+.chainage-location-card div {
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+}
+
+.chainage-detail-grid span,
+.chainage-location-card span {
+  color: var(--ink-3);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.chainage-detail-description {
+  border-left: 3px solid var(--primary);
+  margin: 0;
+  padding: 4px 0 4px 12px;
+}
+
+.chainage-location-card {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 /* ---------- Tabs & filters ---------- */
@@ -1582,6 +1762,7 @@ table.table {
   .answer-row,
   .prestart-photo-grid,
   .chainage-grid,
+  .chainage-location-card,
   .chainage-observation {
     grid-template-columns: 1fr;
   }

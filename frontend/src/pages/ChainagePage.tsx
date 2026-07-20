@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Layout } from "../components/Layout.tsx";
 import { ProjectSelect } from "../components/ProjectSelect.tsx";
-import { EmptyState, ErrorAlert, Field, Icon, Loading, Select, StatusBadge, TextArea, TextInput, useToast } from "../components/ui.tsx";
+import { EmptyState, ErrorAlert, Field, Icon, Loading, Modal, Select, StatusBadge, TextArea, TextInput, useToast } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
 import { formatDateTime, titleCase } from "../lib/format.ts";
 import type { ChainageAlignment, ChainageObservation, FileAsset } from "../lib/types.ts";
@@ -9,6 +9,10 @@ import { useApiQuery, useMutation } from "../lib/useApi.ts";
 
 const SIDES = ["LEFT", "CENTRE", "RIGHT", "BOTH", "UNKNOWN"];
 const CATEGORIES = ["ISSUE", "DEFECT", "SCOPE", "QUOTE", "PHOTO_RECORD", "ACCESS", "UTILITY", "DRAINAGE"];
+const TILE_SIZE = 256;
+const MAP_W = 720;
+const MAP_H = 440;
+const DEFAULT_CENTER = { latitude: -32.9283, longitude: 151.7817 };
 
 function toNumber(value?: string | number | null): number {
   if (value === null || value === undefined || value === "") return 0;
@@ -44,61 +48,332 @@ function parseGeometry(text: string): ChainageAlignment["geometry"] | undefined 
   return coordinates.length >= 2 ? { type: "LineString", coordinates } : undefined;
 }
 
-function AlignmentMap({ alignment, observations }: { alignment?: ChainageAlignment; observations: ChainageObservation[] }) {
-  if (!alignment) return <div className="chainage-map empty-map">Select or create a road alignment.</div>;
+function latLngToWorld(latitude: number, longitude: number, zoom: number) {
+  const scale = TILE_SIZE * 2 ** zoom;
+  const sinLat = Math.sin((latitude * Math.PI) / 180);
+  return {
+    x: ((longitude + 180) / 360) * scale,
+    y: (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale,
+  };
+}
+
+function worldToLatLng(x: number, y: number, zoom: number) {
+  const scale = TILE_SIZE * 2 ** zoom;
+  const longitude = (x / scale) * 360 - 180;
+  const n = Math.PI - (2 * Math.PI * y) / scale;
+  const latitude = (180 / Math.PI) * Math.atan(0.5 * (Math.exp(n) - Math.exp(-n)));
+  return { latitude, longitude };
+}
+
+function haversineM(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
+  const r = 6371000;
+  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
+  const dLng = ((b.longitude - a.longitude) * Math.PI) / 180;
+  const lat1 = (a.latitude * Math.PI) / 180;
+  const lat2 = (b.latitude * Math.PI) / 180;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * r * Math.asin(Math.sqrt(h));
+}
+
+function nearestChainage(alignment: ChainageAlignment | undefined, point: { latitude: number; longitude: number }) {
+  const coords = alignment?.geometry?.coordinates ?? [];
+  if (!alignment || coords.length < 2) return null;
+  const points = coords.map(([longitude, latitude]) => ({ latitude, longitude }));
+  const total = points.slice(1).reduce((sum, item, index) => sum + haversineM(points[index], item), 0);
+  if (total <= 0) return null;
+  const originLat = point.latitude;
+  const toXY = (p: { latitude: number; longitude: number }) => ({
+    x: (p.longitude - point.longitude) * 111320 * Math.cos((originLat * Math.PI) / 180),
+    y: (p.latitude - point.latitude) * 110540,
+  });
+  let best = { distanceM: Number.POSITIVE_INFINITY, alongM: 0 };
+  let traversed = 0;
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const a = points[i];
+    const b = points[i + 1];
+    const ax = toXY(a).x;
+    const ay = toXY(a).y;
+    const bx = toXY(b).x;
+    const by = toXY(b).y;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy || 1;
+    const t = Math.min(1, Math.max(0, -(ax * dx + ay * dy) / len2));
+    const px = ax + dx * t;
+    const py = ay + dy * t;
+    const distanceM = Math.sqrt(px * px + py * py);
+    const segLen = haversineM(a, b);
+    if (distanceM < best.distanceM) best = { distanceM, alongM: traversed + segLen * t };
+    traversed += segLen;
+  }
   const start = toNumber(alignment.startChainageM);
   const end = toNumber(alignment.endChainageM);
-  const span = Math.max(1, end - start);
-  const markers = observations.filter((item) => item.alignmentId === alignment.id);
-  const coordinates = alignment.geometry?.coordinates ?? [];
-  const xs = coordinates.map(([lng]) => lng);
-  const ys = coordinates.map(([, lat]) => lat);
-  const minX = coordinates.length ? Math.min(...xs) : 0;
-  const maxX = coordinates.length ? Math.max(...xs) : 1;
-  const minY = coordinates.length ? Math.min(...ys) : 0;
-  const maxY = coordinates.length ? Math.max(...ys) : 1;
-  const path = coordinates.length
-    ? coordinates
-        .map(([lng, lat], index) => {
-          const x = 24 + ((lng - minX) / Math.max(0.000001, maxX - minX)) * 552;
-          const y = 188 - ((lat - minY) / Math.max(0.000001, maxY - minY)) * 148;
-          return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-        })
-        .join(" ")
-    : "M 24 112 L 576 112";
+  return { chainageM: start + (best.alongM / total) * (end - start), distanceM: best.distanceM };
+}
+
+function interpolateChainagePosition(alignment: ChainageAlignment | undefined, chainageM: string | number) {
+  const coords = alignment?.geometry?.coordinates ?? [];
+  if (!alignment || coords.length < 2) return null;
+  const start = toNumber(alignment.startChainageM);
+  const end = toNumber(alignment.endChainageM);
+  const fraction = Math.min(1, Math.max(0, (toNumber(chainageM) - start) / Math.max(1, end - start)));
+  const points = coords.map(([longitude, latitude]) => ({ latitude, longitude }));
+  const lengths = points.slice(1).map((item, index) => haversineM(points[index], item));
+  const total = lengths.reduce((sum, value) => sum + value, 0);
+  let target = total * fraction;
+  for (let i = 0; i < lengths.length; i += 1) {
+    if (target <= lengths[i] || i === lengths.length - 1) {
+      const t = lengths[i] > 0 ? target / lengths[i] : 0;
+      const a = points[i];
+      const b = points[i + 1];
+      return { latitude: a.latitude + (b.latitude - a.latitude) * t, longitude: a.longitude + (b.longitude - a.longitude) * t };
+    }
+    target -= lengths[i];
+  }
+  return points[0];
+}
+
+type WorkMapMarkerItem = { item: ChainageObservation; screen: { left: number; top: number } };
+type WorkMapRenderItem =
+  | ({ type: "marker"; key: string } & WorkMapMarkerItem)
+  | { type: "cluster"; key: string; screen: { left: number; top: number }; count: number };
+
+function WorkMap({
+  alignment,
+  observations,
+  draft,
+  onPick,
+  onUseLocation,
+  onSelectObservation,
+}: {
+  alignment?: ChainageAlignment;
+  observations: ChainageObservation[];
+  draft?: { latitude: number; longitude: number } | null;
+  onPick: (point: { latitude: number; longitude: number; chainageM?: number; snapDistanceM?: number }) => void;
+  onUseLocation: () => void;
+  onSelectObservation?: (id: string) => void;
+}) {
+  const initialCenter = useMemo(() => {
+    const firstCoord = alignment?.geometry?.coordinates?.[0];
+    const firstObservation = observations.find((item) => item.latitude && item.longitude);
+    if (firstObservation) return { latitude: toNumber(firstObservation.latitude), longitude: toNumber(firstObservation.longitude) };
+    if (firstCoord) return { latitude: firstCoord[1], longitude: firstCoord[0] };
+    return DEFAULT_CENTER;
+  }, [alignment, observations]);
+  const [center, setCenter] = useState(initialCenter);
+  const [zoom, setZoom] = useState(15);
+
+  useEffect(() => setCenter(initialCenter), [initialCenter]);
+
+  const centerWorld = latLngToWorld(center.latitude, center.longitude, zoom);
+  const topLeft = { x: centerWorld.x - MAP_W / 2, y: centerWorld.y - MAP_H / 2 };
+  const tileMinX = Math.floor(topLeft.x / TILE_SIZE);
+  const tileMaxX = Math.floor((topLeft.x + MAP_W) / TILE_SIZE);
+  const tileMinY = Math.floor(topLeft.y / TILE_SIZE);
+  const tileMaxY = Math.floor((topLeft.y + MAP_H) / TILE_SIZE);
+  const tileCount = 2 ** zoom;
+  const tiles = [];
+  for (let x = tileMinX; x <= tileMaxX; x += 1) {
+    for (let y = tileMinY; y <= tileMaxY; y += 1) {
+      if (y < 0 || y >= tileCount) continue;
+      const wrappedX = ((x % tileCount) + tileCount) % tileCount;
+      tiles.push({ x, y, wrappedX, left: x * TILE_SIZE - topLeft.x, top: y * TILE_SIZE - topLeft.y });
+    }
+  }
+  const toScreen = (latitude: number, longitude: number) => {
+    const world = latLngToWorld(latitude, longitude, zoom);
+    return { left: world.x - topLeft.x, top: world.y - topLeft.y };
+  };
+  const linePoints = alignment?.geometry?.coordinates?.map(([longitude, latitude]) => toScreen(latitude, longitude)) ?? [];
+  const markerItems = observations
+    .map((item) => {
+      const latLng = item.latitude && item.longitude ? { latitude: toNumber(item.latitude), longitude: toNumber(item.longitude) } : interpolateChainagePosition(item.alignment, item.chainageM);
+      return latLng ? { item, screen: toScreen(latLng.latitude, latLng.longitude) } : null;
+    })
+    .filter(Boolean) as WorkMapMarkerItem[];
+  const mapMarkers = useMemo(() => {
+    if (zoom > 13) return markerItems.map((marker): WorkMapRenderItem => ({ type: "marker", key: marker.item.id, ...marker }));
+    const groups = new Map<string, Array<{ item: ChainageObservation; screen: { left: number; top: number } }>>();
+    const cellSize = 86;
+    markerItems.forEach((marker) => {
+      const key = `${Math.floor(marker.screen.left / cellSize)}:${Math.floor(marker.screen.top / cellSize)}`;
+      groups.set(key, [...(groups.get(key) ?? []), marker]);
+    });
+    return Array.from(groups.entries()).flatMap<WorkMapRenderItem>(([key, group]) => {
+      if (group.length === 1) return [{ type: "marker" as const, key: group[0].item.id, ...group[0] }];
+      const screen = group.reduce(
+        (sum, marker) => ({ left: sum.left + marker.screen.left / group.length, top: sum.top + marker.screen.top / group.length }),
+        { left: 0, top: 0 },
+      );
+      return [{ type: "cluster" as const, key, screen, count: group.length }];
+    });
+  }, [markerItems, zoom]);
+  const draftScreen = draft ? toScreen(draft.latitude, draft.longitude) : null;
+
+  const pan = (dx: number, dy: number) => {
+    const next = worldToLatLng(centerWorld.x + dx, centerWorld.y + dy, zoom);
+    setCenter(next);
+  };
+
   return (
-    <div className="chainage-map">
-      <svg viewBox="0 0 600 220" role="img" aria-label={`${alignment.name} chainage map`}>
-        <path d={path} className="chainage-line" />
-        {[0, 0.25, 0.5, 0.75, 1].map((fraction) => (
-          <g key={fraction}>
-            <line x1={24 + fraction * 552} x2={24 + fraction * 552} y1={102} y2={122} className="chainage-tick" />
-            <text x={24 + fraction * 552} y={148} textAnchor="middle">
-              {formatChainage(start + span * fraction)}
-            </text>
-          </g>
+    <div className="work-map-shell">
+      <div
+        className="work-map"
+        onClick={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect();
+          const x = topLeft.x + ((event.clientX - rect.left) / rect.width) * MAP_W;
+          const y = topLeft.y + ((event.clientY - rect.top) / rect.height) * MAP_H;
+          const point = worldToLatLng(x, y, zoom);
+          const nearest = nearestChainage(alignment, point);
+          onPick({ ...point, chainageM: nearest?.chainageM, snapDistanceM: nearest?.distanceM });
+        }}
+      >
+        {tiles.map((tile) => (
+          <img
+            alt=""
+            className="work-map-tile"
+            draggable={false}
+            key={`${tile.x}-${tile.y}`}
+            src={`https://tile.openstreetmap.org/${zoom}/${tile.wrappedX}/${tile.y}.png`}
+            style={{ left: tile.left, top: tile.top }}
+          />
         ))}
-        {markers.map((item) => {
-          const fraction = Math.min(1, Math.max(0, (toNumber(item.chainageM) - start) / span));
-          const x = 24 + fraction * 552;
-          const y = item.side === "LEFT" ? 82 : item.side === "RIGHT" ? 142 : 112;
-          return (
-            <g key={item.id}>
-              <circle cx={x} cy={y} r="8" className={`chainage-marker ${item.status.toLowerCase()}`} />
-              <text x={x} y={y - 14} textAnchor="middle">
-                {formatChainage(item.chainageM)}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="chainage-map-foot">
-        <b>{alignment.name}</b>
-        <span>
-          {formatChainage(alignment.startChainageM)} to {formatChainage(alignment.endChainageM)}
-        </span>
+        {linePoints.length > 1 && (
+          <svg className="work-map-overlay" viewBox={`0 0 ${MAP_W} ${MAP_H}`}>
+            <polyline points={linePoints.map((point) => `${point.left},${point.top}`).join(" ")} className="work-map-alignment" />
+          </svg>
+        )}
+        {mapMarkers.map((marker) =>
+          marker.type === "cluster" ? (
+            <button
+              className="work-map-cluster"
+              key={marker.key}
+              style={{ left: marker.screen.left, top: marker.screen.top }}
+              onClick={(event) => {
+                event.stopPropagation();
+                setZoom((value) => Math.min(18, value + 2));
+              }}
+              type="button"
+            >
+              {marker.count}
+            </button>
+          ) : (
+            <button
+              className={`work-map-marker ${marker.item.status.toLowerCase()}`}
+              key={marker.item.id}
+              style={{ left: marker.screen.left, top: marker.screen.top }}
+              onClick={(event) => {
+                event.stopPropagation();
+                onSelectObservation?.(marker.item.id);
+              }}
+              type="button"
+            >
+              <b>{formatChainage(marker.item.chainageM)}</b>
+              <span>{marker.item.title}</span>
+            </button>
+          ),
+        )}
+        {draftScreen && (
+          <div className="work-map-draft-marker" style={{ left: draftScreen.left, top: draftScreen.top }}>
+            Draft
+          </div>
+        )}
+        <div className="work-map-attribution">
+          &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors
+        </div>
+      </div>
+      <div className="work-map-controls" aria-label="Map controls">
+        <button className="btn-icon" onClick={() => setZoom((value) => Math.min(18, value + 1))} aria-label="Zoom in">+</button>
+        <button className="btn-icon" onClick={() => setZoom((value) => Math.max(8, value - 1))} aria-label="Zoom out">-</button>
+        <button className="btn-icon" onClick={() => pan(0, -160)} aria-label="Pan north">N</button>
+        <button className="btn-icon" onClick={() => pan(0, 160)} aria-label="Pan south">S</button>
+        <button className="btn-icon" onClick={() => pan(-160, 0)} aria-label="Pan west">W</button>
+        <button className="btn-icon" onClick={() => pan(160, 0)} aria-label="Pan east">E</button>
+        <button className="btn-icon" onClick={onUseLocation} aria-label="Use current location">GPS</button>
+      </div>
+      <div className="work-map-caption">
+        Tap the map to place a draft work item. If the selected road has geometry, TirGeo will calculate the nearest chainage.
       </div>
     </div>
+  );
+}
+
+function ChainageObservationDetailModal({ observationId, onClose }: { observationId: string; onClose: () => void }) {
+  const [tab, setTab] = useState<"details" | "images" | "location">("details");
+  const detailQuery = useApiQuery<ChainageObservation>(`/api/v1/chainage/observations/${observationId}`);
+  const item = detailQuery.data;
+  const title = item ? `${formatChainage(item.chainageM)} · ${item.title}` : "Chainage detail";
+
+  return (
+    <Modal title={title} onClose={onClose} large>
+      <div className="tabs chainage-detail-tabs">
+        <button className={`tab ${tab === "details" ? "active" : ""}`} onClick={() => setTab("details")} type="button">Details</button>
+        <button className={`tab ${tab === "images" ? "active" : ""}`} onClick={() => setTab("images")} type="button">Images ({item?.photos?.length ?? 0})</button>
+        <button className={`tab ${tab === "location" ? "active" : ""}`} onClick={() => setTab("location")} type="button">Location</button>
+      </div>
+      <ErrorAlert error={detailQuery.error} />
+      {detailQuery.loading && !item ? (
+        <Loading />
+      ) : item ? (
+        <>
+          {tab === "details" && (
+            <div className="stack">
+              <div className="chainage-detail-hero">
+                <div>
+                  <span className="tiny">Chainage</span>
+                  <b>{formatChainage(item.chainageM)}</b>
+                  <span>{item.alignment.name}{item.alignment.roadRef ? ` · ${item.alignment.roadRef}` : ""}</span>
+                </div>
+                <StatusBadge status={item.status} />
+              </div>
+              <div className="detail-grid chainage-detail-grid">
+                <div><span>Project</span><b>{item.project ? `${item.project.code} · ${item.project.name}` : "Not linked"}</b></div>
+                <div><span>Category</span><b>{titleCase(item.category)}</b></div>
+                <div><span>Side / offset</span><b>{titleCase(item.side)}{item.offsetM ? ` · ${item.offsetM} m` : ""}</b></div>
+                <div><span>Recorded</span><b>{formatDateTime(item.observedAt)}</b></div>
+                <div><span>Recorded by</span><b>{item.createdBy?.name ?? "Unknown"}</b></div>
+                <div><span>GPS accuracy</span><b>{item.gpsAccuracyM ? `${item.gpsAccuracyM} m` : "Not captured"}</b></div>
+              </div>
+              {item.description ? <p className="chainage-detail-description">{item.description}</p> : <p className="muted">No description added.</p>}
+            </div>
+          )}
+          {tab === "images" && (
+            item.photos?.length ? (
+              <div className="prestart-photo-grid">
+                {item.photos.map((photo) => (
+                  <a key={photo.id} href={photo.downloadUrl ?? photo.url} target="_blank" rel="noreferrer" className="prestart-photo">
+                    <img src={photo.downloadUrl ?? photo.url} alt={photo.originalName} />
+                    <span>{photo.originalName}</span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <EmptyState title="No images attached" hint="Photos added in the field will show here." />
+            )
+          )}
+          {tab === "location" && (
+            <div className="chainage-location-card">
+              <div>
+                <span>Road</span>
+                <b>{item.alignment.name}</b>
+              </div>
+              <div>
+                <span>Chainage</span>
+                <b>{formatChainage(item.chainageM)}</b>
+              </div>
+              <div>
+                <span>Latitude</span>
+                <b>{item.latitude ?? "Not captured"}</b>
+              </div>
+              <div>
+                <span>Longitude</span>
+                <b>{item.longitude ?? "Not captured"}</b>
+              </div>
+            </div>
+          )}
+        </>
+      ) : null}
+    </Modal>
   );
 }
 
@@ -108,8 +383,11 @@ export function ChainagePage() {
   const [selectedAlignmentId, setSelectedAlignmentId] = useState("");
   const [alignmentForm, setAlignmentForm] = useState({ name: "", roadRef: "", direction: "", startLabel: "", endLabel: "", startChainage: "0+000", endChainage: "", geometryText: "", notes: "" });
   const [observationForm, setObservationForm] = useState({ chainage: "", side: "CENTRE", offsetM: "", category: "ISSUE", title: "", description: "", latitude: "", longitude: "", gpsAccuracyM: "" });
+  const [snapHint, setSnapHint] = useState("");
   const [photos, setPhotos] = useState<FileAsset[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  const [selectedObservationId, setSelectedObservationId] = useState<string | null>(null);
 
   const alignmentsQuery = useApiQuery<ChainageAlignment[]>("/api/v1/chainage/alignments", { projectId: projectId || undefined });
   const observationsQuery = useApiQuery<ChainageObservation[]>("/api/v1/chainage/observations", { projectId: projectId || undefined, limit: 100 });
@@ -222,15 +500,59 @@ export function ChainagePage() {
       <ErrorAlert error={alignmentsQuery.error ?? observationsQuery.error} />
       {(alignmentsQuery.loading || observationsQuery.loading) && !alignmentsQuery.data && <Loading />}
 
-      <section className="chainage-grid">
-        <div className="card card-pad stack">
-          <div className="row-between">
-            <h2>Alignment map</h2>
-            <Select value={selectedAlignment?.id ?? ""} onChange={setSelectedAlignmentId} options={alignmentOptions} allowEmpty emptyLabel="Select road" />
+      <section className="card card-pad stack">
+        <div className="row-between">
+          <div>
+            <h2>Work items</h2>
+            <p className="muted">Switch between a chainage map and a field list. Tap any item to view details, location and photos.</p>
           </div>
-          <AlignmentMap alignment={selectedAlignment} observations={observations} />
+          <Select value={selectedAlignment?.id ?? ""} onChange={setSelectedAlignmentId} options={alignmentOptions} allowEmpty emptyLabel="Select road" />
         </div>
+        <div className="tabs">
+          <button className={`tab ${viewMode === "map" ? "active" : ""}`} onClick={() => setViewMode("map")} type="button">Map ({observations.length})</button>
+          <button className={`tab ${viewMode === "list" ? "active" : ""}`} onClick={() => setViewMode("list")} type="button">List ({observations.length})</button>
+        </div>
+        {viewMode === "map" ? (
+          <WorkMap
+            alignment={selectedAlignment}
+            observations={observations}
+            draft={observationForm.latitude && observationForm.longitude ? { latitude: Number(observationForm.latitude), longitude: Number(observationForm.longitude) } : null}
+            onUseLocation={useCurrentLocation}
+            onSelectObservation={setSelectedObservationId}
+            onPick={(point) => {
+              setObservationForm((form) => ({
+                ...form,
+                latitude: point.latitude.toFixed(7),
+                longitude: point.longitude.toFixed(7),
+                chainage: point.chainageM !== undefined ? formatChainage(point.chainageM) : form.chainage,
+              }));
+              setSnapHint(point.chainageM !== undefined ? `Nearest ${formatChainage(point.chainageM)} (${Math.round(point.snapDistanceM ?? 0)} m from alignment)` : "Point captured. Add chainage manually or add road geometry to auto-calculate.");
+            }}
+          />
+        ) : observations.length === 0 ? (
+          <EmptyState title="No chainage details yet" hint="Captured defects, scope notes and quote items will appear here." />
+        ) : (
+          <div className="chainage-list">
+            {observations.map((item) => (
+              <button className="chainage-observation" key={item.id} onClick={() => setSelectedObservationId(item.id)} type="button">
+                <div>
+                  <b>{formatChainage(item.chainageM)}</b>
+                  <span>{item.alignment.name} · {titleCase(item.side)}</span>
+                </div>
+                <div>
+                  <b>{item.title}</b>
+                  <span className="tiny">{titleCase(item.category)} · {formatDateTime(item.observedAt)}{item.createdBy ? ` · ${item.createdBy.name}` : ""}</span>
+                  {item.description && <p className="muted">{item.description}</p>}
+                </div>
+                <StatusBadge status={item.status} />
+              </button>
+            ))}
+          </div>
+        )}
+        {snapHint && <div className="alert alert-info">{snapHint}</div>}
+      </section>
 
+      <section className="chainage-grid">
         <div className="card card-pad stack">
           <h2>Add road alignment</h2>
           <div className="form-grid">
@@ -265,9 +587,8 @@ export function ChainagePage() {
           </button>
           <ErrorAlert error={createAlignment.error} onDismiss={createAlignment.reset} />
         </div>
-      </section>
 
-      <section className="card card-pad stack">
+        <div className="card card-pad stack">
         <div className="row-between">
           <h2>Record chainage detail</h2>
           <button className="btn btn-ghost btn-sm" onClick={useCurrentLocation}>
@@ -329,31 +650,9 @@ export function ChainagePage() {
           </div>
         )}
         <ErrorAlert error={createObservation.error} onDismiss={createObservation.reset} />
+        </div>
       </section>
-
-      <section className="card card-pad stack">
-        <h2>Recorded details</h2>
-        {observations.length === 0 ? (
-          <EmptyState title="No chainage details yet" hint="Captured defects, scope notes and quote items will appear here." />
-        ) : (
-          <div className="chainage-list">
-            {observations.map((item) => (
-              <article className="chainage-observation" key={item.id}>
-                <div>
-                  <b>{formatChainage(item.chainageM)}</b>
-                  <span>{item.alignment.name} - {titleCase(item.side)}</span>
-                </div>
-                <div>
-                  <b>{item.title}</b>
-                  <span className="tiny">{titleCase(item.category)} - {formatDateTime(item.observedAt)}{item.createdBy ? ` - ${item.createdBy.name}` : ""}</span>
-                  {item.description && <p className="muted">{item.description}</p>}
-                </div>
-                <StatusBadge status={item.status} />
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
+      {selectedObservationId && <ChainageObservationDetailModal observationId={selectedObservationId} onClose={() => setSelectedObservationId(null)} />}
     </Layout>
   );
 }
