@@ -277,6 +277,12 @@ export function Layout({ title, children, actions }: { title: string; children: 
           <h1>{title}</h1>
           {actions}
         </header>
+        <div className="construction-banner" role="status">
+          <Icon name="alert" size={16} />
+          <span>
+            <b>Under construction.</b> Some functions are still being built and may not be available yet.
+          </span>
+        </div>
         <div className="content">
           {/* Actions repeated for mobile since the topbar is hidden there */}
           {actions && <div className="row mobile-actions-slot">{null}</div>}
