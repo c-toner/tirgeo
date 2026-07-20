@@ -162,8 +162,10 @@ function WorkMap({
   }, [alignment, observations]);
   const [center, setCenter] = useState(initialCenter);
   const [zoom, setZoom] = useState(15);
+  const [failedTiles, setFailedTiles] = useState<Record<string, true>>({});
 
   useEffect(() => setCenter(initialCenter), [initialCenter]);
+  useEffect(() => setFailedTiles({}), [center.latitude, center.longitude, zoom]);
 
   const centerWorld = latLngToWorld(center.latitude, center.longitude, zoom);
   const topLeft = { x: centerWorld.x - MAP_W / 2, y: centerWorld.y - MAP_H / 2 };
@@ -228,16 +230,26 @@ function WorkMap({
           onPick({ ...point, chainageM: nearest?.chainageM, snapDistanceM: nearest?.distanceM });
         }}
       >
-        {tiles.map((tile) => (
-          <img
-            alt=""
-            className="work-map-tile"
-            draggable={false}
-            key={`${tile.x}-${tile.y}`}
-            src={`https://tile.openstreetmap.org/${zoom}/${tile.wrappedX}/${tile.y}.png`}
-            style={{ left: tile.left, top: tile.top }}
-          />
-        ))}
+        {tiles.map((tile) => {
+          const tileKey = `${zoom}-${tile.wrappedX}-${tile.y}`;
+          return (
+            <img
+              alt=""
+              className="work-map-tile"
+              draggable={false}
+              key={tileKey}
+              referrerPolicy="origin"
+              src={`https://tile.openstreetmap.org/${zoom}/${tile.wrappedX}/${tile.y}.png`}
+              style={{ left: tile.left, top: tile.top, visibility: failedTiles[tileKey] ? "hidden" : "visible" }}
+              onError={() => setFailedTiles((current) => (current[tileKey] ? current : { ...current, [tileKey]: true }))}
+            />
+          );
+        })}
+        {Object.keys(failedTiles).length > 0 && (
+          <div className="work-map-tile-warning">
+            Base map unavailable. Chainage items are still shown.
+          </div>
+        )}
         {linePoints.length > 1 && (
           <svg className="work-map-overlay" viewBox={`0 0 ${MAP_W} ${MAP_H}`}>
             <polyline points={linePoints.map((point) => `${point.left},${point.top}`).join(" ")} className="work-map-alignment" />

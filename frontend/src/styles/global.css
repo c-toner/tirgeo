@@ -950,7 +950,11 @@ table.table {
 
 .work-map {
   aspect-ratio: 16 / 9;
-  background: var(--surface-2);
+  background:
+    linear-gradient(90deg, transparent 49.75%, rgba(255, 255, 255, 0.14) 50%, transparent 50.25%),
+    linear-gradient(0deg, transparent 49.75%, rgba(255, 255, 255, 0.14) 50%, transparent 50.25%),
+    var(--surface-2);
+  background-size: 240px 240px, 240px 240px, auto;
   border: 1px solid var(--line);
   border-radius: 8px;
   cursor: crosshair;
@@ -965,6 +969,21 @@ table.table {
   pointer-events: none;
   position: absolute;
   width: 256px;
+}
+
+.work-map-tile-warning {
+  background: rgba(10, 10, 10, 0.78);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 750;
+  left: 12px;
+  max-width: min(320px, calc(100% - 24px));
+  padding: 8px 10px;
+  position: absolute;
+  top: 12px;
+  z-index: 6;
 }
 
 .work-map-overlay {
