@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { useAuth } from "../lib/auth.tsx";
+import { canAccessSection, useAuth } from "../lib/auth.tsx";
 import { Link, usePath } from "../lib/router.tsx";
 import { useApiQuery, invalidate } from "../lib/useApi.ts";
 import { api } from "../lib/api.ts";
@@ -188,7 +188,7 @@ export function Layout({ title, children, actions }: { title: string; children: 
 
   const visibleGroups = NAV.map((group) => ({
     ...group,
-    items: group.items.filter((item) => !item.section || user?.sections.includes(item.section)),
+    items: group.items.filter((item) => !item.section || canAccessSection(user, item.section)),
   })).filter((group) => group.items.length > 0);
 
   const isActive = (to: string) => (to === "/" ? path === "/" : path.startsWith(to));
@@ -285,7 +285,7 @@ export function Layout({ title, children, actions }: { title: string; children: 
       </main>
 
       <nav className="mobile-nav" aria-label="Primary">
-        {MOBILE_NAV.filter((item) => !item.section || user?.sections.includes(item.section)).map((item) => (
+        {MOBILE_NAV.filter((item) => !item.section || canAccessSection(user, item.section)).map((item) => (
           <Link key={item.to} to={item.to} className={isActive(item.to) ? "active" : ""}>
             <Icon name={item.icon} size={19} />
             {item.label}

@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import type { ReactNode } from "react";
 import { api, clearSession, getStoredOrganisationId, getStoredUser, getToken, setUnauthorisedHandler, storeSession } from "./api.ts";
 import { invalidate } from "./useApi.ts";
-import type { AuthUser, LoginResponse, Role } from "./types.ts";
+import type { AccountSection, AuthUser, LoginResponse, Role } from "./types.ts";
 import { navigate } from "./router.tsx";
 
 interface AuthContextValue {
@@ -72,3 +72,14 @@ export const DOCUMENT_APPROVERS: Role[] = ["OWNER", "ADMIN", "SAFETY_MANAGER"];
 export const PAYROLL_MANAGERS: Role[] = ["OWNER", "ADMIN", "PAYROLL"];
 export const PLANT_CLEARERS: Role[] = ["OWNER", "ADMIN", "PROJECT_MANAGER", "OPERATIONS_MANAGER", "SAFETY_MANAGER"];
 export const TEMPLATE_ADMINS: Role[] = ["OWNER", "ADMIN"];
+
+const COMPLETED_PRE_START_ROLES: Role[] = ["OWNER", "ADMIN", "PROJECT_MANAGER", "OPERATIONS_MANAGER", "SUPERVISOR", "SITE_SUPERVISOR", "SITE_ENGINEER", "FOREMAN", "SAFETY_MANAGER"];
+const CHAINAGE_ROLES: Role[] = COMPLETED_PRE_START_ROLES;
+
+export function canAccessSection(user: AuthUser | null | undefined, section: AccountSection): boolean {
+  if (!user) return false;
+  if (user.sections.includes(section)) return true;
+  if (section === "COMPLETED_PRE_STARTS") return COMPLETED_PRE_START_ROLES.includes(user.role);
+  if (section === "CHAINAGE") return CHAINAGE_ROLES.includes(user.role);
+  return false;
+}

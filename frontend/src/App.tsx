@@ -1,4 +1,4 @@
-import { AuthProvider, useAuth } from "./lib/auth.tsx";
+import { AuthProvider, canAccessSection, useAuth } from "./lib/auth.tsx";
 import { RouterProvider, matchPath, usePath } from "./lib/router.tsx";
 import { ToastProvider } from "./components/ui.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
@@ -59,10 +59,10 @@ function Routes() {
   const tenderMatch = matchPath("/commercial/tenders/:id", clean);
   const preStartMatch = matchPath("/plant/pre-starts/:id", clean);
   if (preStartMatch) {
-    if (!user.sections.includes("PLANT") && !user.sections.includes("COMPLETED_PRE_STARTS")) return <DashboardPage />;
+    if (!canAccessSection(user, "PLANT") && !canAccessSection(user, "COMPLETED_PRE_STARTS")) return <DashboardPage />;
     return <PreStartDetailPage preStartId={preStartMatch.id} />;
   }
-  if (!user.sections.includes(routeSection(clean))) return <DashboardPage />;
+  if (!canAccessSection(user, routeSection(clean))) return <DashboardPage />;
   if (tenderMatch) return <TenderDetailPage tenderId={tenderMatch.id} />;
 
   switch (clean) {

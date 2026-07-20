@@ -144,7 +144,7 @@ const routes: FastifyPluginAsync = async app => {
     if ((req.auth.role === Role.PROJECT_MANAGER || req.auth.role === Role.OPERATIONS_MANAGER || req.auth.role === Role.SITE_SUPERVISOR) && !managerCreatableRoles.has(body.role)) {
       return reply.code(403).send({ error: "Managers can only create crew and field-support accounts" });
     }
-    const user = await app.prisma.$transaction(async tx => {
+    const userId = await app.prisma.$transaction(async tx => {
       const created = await tx.user.create({
         data: {
           organisationId: req.auth.organisationId,
@@ -175,15 +175,16 @@ const routes: FastifyPluginAsync = async app => {
           },
         });
       }
-      return findAccountUser({ ...app, prisma: tx } as typeof app, req.auth.organisationId, created.id);
+      return created.id;
     });
+    const user = await findAccountUser(app, req.auth.organisationId, userId);
     await audit(app, req, "CREATE", "User", user.id, { role: body.role, workerCreated: !!body.worker, sectionOverrides: body.sectionOverrides });
     return reply.code(201).send(safeUser(user, canViewPayrollDetails(req.auth.role)));
   });
 
   app.put("/me", { preHandler: authed }, async (req, reply) => {
     const body = accountUpdate.parse(req.body);
-    const user = await app.prisma.$transaction(async tx => {
+    const userId = await app.prisma.$transaction(async tx => {
       const current = await tx.user.findFirstOrThrow({ where: { id: req.auth.userId, organisationId: req.auth.organisationId }, select: { id: true, worker: { select: { id: true } } } });
       await tx.user.update({
         where: { id: current.id },
@@ -201,8 +202,9 @@ const routes: FastifyPluginAsync = async app => {
           data: { payrollDetailsEncrypted: body.payrollDetails === null ? null : encryptJson(body.payrollDetails) },
         });
       }
-      return findAccountUser({ ...app, prisma: tx } as typeof app, req.auth.organisationId, current.id);
+      return current.id;
     });
+    const user = await findAccountUser(app, req.auth.organisationId, userId);
     await audit(app, req, "UPDATE", "User", req.auth.userId, { fields: Object.keys(body).filter(key => key !== "payrollDetails"), payrollDetailsUpdated: body.payrollDetails !== undefined });
     return reply.send(safeUser(user, true));
   });
@@ -241,7 +243,7 @@ const routes: FastifyPluginAsync = async app => {
       active: z.boolean().optional(),
       sectionOverrides: z.array(accessOverride).optional(),
     }).parse(req.body);
-    const user = await app.prisma.$transaction(async tx => {
+    const userId = await app.prisma.$transaction(async tx => {
       const current = await tx.user.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId }, select: { id: true, worker: { select: { id: true } } } });
       await tx.user.update({
         where: { id: current.id },
@@ -259,16 +261,17 @@ const routes: FastifyPluginAsync = async app => {
         await tx.worker.update({ where: { id: current.worker.id }, data: { payrollDetailsEncrypted: body.payrollDetails === null ? null : encryptJson(body.payrollDetails) } });
       }
       if (body.sectionOverrides) {
-        for (const override of body.sectionOverrides) {
-          await tx.userSectionAccess.upsert({
+        await Promise.all(body.sectionOverrides.map(override =>
+          tx.userSectionAccess.upsert({
             where: { userId_section: { userId: current.id, section: override.section } },
             create: { userId: current.id, section: override.section, enabled: override.enabled, grantedById: req.auth.userId },
             update: { enabled: override.enabled, grantedById: req.auth.userId },
-          });
-        }
+          }),
+        ));
       }
-      return findAccountUser({ ...app, prisma: tx } as typeof app, req.auth.organisationId, current.id);
+      return current.id;
     });
+    const user = await findAccountUser(app, req.auth.organisationId, userId);
     await audit(app, req, "UPDATE_ACCESS", "User", id, { role: body.role, active: body.active, sectionOverrides: body.sectionOverrides, payrollDetailsUpdated: body.payrollDetails !== undefined });
     return safeUser(user, canViewPayrollDetails(req.auth.role));
   });
