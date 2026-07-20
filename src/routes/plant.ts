@@ -44,6 +44,25 @@ const routes: FastifyPluginAsync = async app => {
     const template = await app.prisma.preStartTemplate.update({ where: { id: existing.id }, data: { status: "PUBLISHED", publishedAt: new Date() } }); await audit(app, req, "PUBLISH", "PreStartTemplate", id, template); return template;
   });
   app.get("/", { preHandler: authed }, req => app.prisma.plant.findMany({ where: { organisationId: req.auth.organisationId }, include: { currentProject: true }, orderBy: { assetNumber: "asc" } }));
+  app.get("/my-pre-starts", { preHandler: authed }, async req => {
+    const q = z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().int().min(1).max(50).default(10) }).parse(req.query);
+    const worker = await app.prisma.worker.findFirst({ where: { organisationId: req.auth.organisationId, userId: req.auth.userId }, select: { id: true } });
+    if (!worker) return { items: [], page: q.page, pageSize: q.pageSize, total: 0 };
+    const where = { workerId: worker.id, plant: { organisationId: req.auth.organisationId } };
+    const [items, total] = await Promise.all([
+      app.prisma.plantPreStart.findMany({
+        where,
+        include: {
+          plant: { select: { id: true, assetNumber: true, type: true, make: true, model: true, currentProject: { select: { id: true, code: true, name: true } } } },
+        },
+        orderBy: { inspectedAt: "desc" },
+        skip: (q.page - 1) * q.pageSize,
+        take: q.pageSize,
+      }),
+      app.prisma.plantPreStart.count({ where }),
+    ]);
+    return { items, page: q.page, pageSize: q.pageSize, total };
+  });
   app.post("/", { preHandler: allowSection(AccountSection.PLANT_MANAGEMENT, ...plantManagers) }, async (req, reply) => {
     const body = z.object({ assetNumber: z.string(), type: z.string(), make: z.string().optional(), model: z.string().optional(), serialNumber: z.string().optional(), registration: z.string().optional(), currentProjectId: z.string().uuid().optional(), nextServiceAt: z.coerce.date().optional(), nextServiceHours: z.number().optional() }).parse(req.body);
     if (body.currentProjectId) await requireOrganisationProject(app, req, body.currentProjectId);

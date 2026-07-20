@@ -19,12 +19,13 @@ import type { SignatureValue } from "../../components/SignaturePad.tsx";
 import { WorkerSelect } from "../../components/WorkerSelect.tsx";
 import { api } from "../../lib/api.ts";
 import { PLANT_CLEARERS, PROJECT_LEADERS, TEMPLATE_ADMINS, useAuth } from "../../lib/auth.tsx";
-import { formatDate, titleCase } from "../../lib/format.ts";
+import { formatDate, formatDateTime, titleCase } from "../../lib/format.ts";
 import { Link } from "../../lib/router.tsx";
-import type { FileAsset, InspectionResult, Plant, PreStartDefect, PreStartTemplate } from "../../lib/types.ts";
+import type { FileAsset, InspectionResult, PaginatedResult, Plant, PlantPreStartSummary, PreStartDefect, PreStartTemplate } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
 
 const DEFECT_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const PRE_START_PAGE_SIZE = 10;
 
 function bestTemplateForPlant(templates: PreStartTemplate[] | undefined, plantType: string): PreStartTemplate | undefined {
   if (!templates?.length) return undefined;
@@ -106,14 +107,17 @@ function CreatePlantModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }) {
+function PreStartModal({ plant: initialPlant, onClose }: { plant?: Plant | null; onClose: () => void }) {
   const toast = useToast();
-  const { data: templates, loading } = useApiQuery<PreStartTemplate[]>("/api/v1/plant/pre-start-templates", {
-    plantType: plant.type,
+  const { data: plants, loading: plantsLoading } = useApiQuery<Plant[]>("/api/v1/plant");
+  const [plantId, setPlantId] = useState(initialPlant?.id ?? "");
+  const plant = plants?.find((item) => item.id === plantId) ?? initialPlant ?? null;
+  const { data: templates, loading } = useApiQuery<PreStartTemplate[]>(plant ? "/api/v1/plant/pre-start-templates" : null, {
+    plantType: plant?.type,
   });
   const [templateId, setTemplateId] = useState("");
   const [workerId, setWorkerId] = useState("");
-  const [projectId, setProjectId] = useState(plant.currentProjectId ?? "");
+  const [projectId, setProjectId] = useState(initialPlant?.currentProjectId ?? "");
   const [hourMeter, setHourMeter] = useState("");
   const [answers, setAnswers] = useState<Record<string, boolean | string | number | null>>({});
   const [defects, setDefects] = useState<Record<string, PreStartDefect>>({});
@@ -122,16 +126,25 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
   const [signature, setSignature] = useState<SignatureValue | null>(null);
   const [signedName, setSignedName] = useState("");
 
-  const template = templates?.find((t) => t.id === templateId) ?? bestTemplateForPlant(templates, plant.type);
+  const template = plant ? templates?.find((t) => t.id === templateId) ?? bestTemplateForPlant(templates, plant.type) : undefined;
 
   useEffect(() => {
+    if (!plantId && initialPlant?.id) setPlantId(initialPlant.id);
+  }, [initialPlant?.id, plantId]);
+
+  useEffect(() => {
+    if (plant?.currentProjectId && !projectId) setProjectId(plant.currentProjectId);
+  }, [plant?.currentProjectId, projectId]);
+
+  useEffect(() => {
+    if (!plant) return;
     const nextTemplate = bestTemplateForPlant(templates, plant.type);
     if (nextTemplate && nextTemplate.id !== templateId) {
       setTemplateId(nextTemplate.id);
       setAnswers({});
       setDefects({});
     }
-  }, [plant.type, templateId, templates]);
+  }, [plant, templateId, templates]);
 
   // Which answered questions trigger a defect, per template defectOn rules.
   const triggering = useMemo(() => {
@@ -173,7 +186,7 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
         const formData = new FormData();
         formData.set("file", file);
         formData.set("entityType", "PlantPreStart");
-        formData.set("metadata", JSON.stringify({ plantId: plant.id, assetNumber: plant.assetNumber, draft: true }));
+        formData.set("metadata", JSON.stringify({ plantId: plant?.id, assetNumber: plant?.assetNumber, draft: true }));
         const asset = await api<FileAsset>("/api/v1/files", { method: "POST", formData });
         uploaded.push(asset);
       }
@@ -188,7 +201,7 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
 
   const mutation = useMutation(
     () =>
-      api(`/api/v1/plant/${plant.id}/pre-starts`, {
+      api(`/api/v1/plant/${plant?.id}/pre-starts`, {
         method: "POST",
         body: {
           workerId: workerId.trim(),
@@ -207,6 +220,7 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
   );
 
   const canSubmit =
+    plant &&
     template &&
     workerId.trim() &&
     missingRequired.length === 0 &&
@@ -217,7 +231,7 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
 
   return (
     <Modal
-      title={`Pre-start — ${plant.assetNumber} (${plant.type})`}
+      title={plant ? `Pre-start — ${plant.assetNumber} (${plant.type})` : "New pre-start"}
       large
       onClose={onClose}
       footer={
@@ -257,15 +271,42 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
       }
     >
       <ErrorAlert error={mutation.error} onDismiss={mutation.reset} />
-      {loading && <Loading />}
-      {!loading && (templates?.length ?? 0) === 0 && (
+      {plantsLoading && <Loading />}
+      {!plantsLoading && (
+        <div className="form-grid">
+          <Field label="Project / location" hint="Choose where this pre-start is being completed.">
+            <ProjectSelect value={projectId} onChange={setProjectId} allowEmpty emptyLabel="Not project-specific" activeOnly />
+          </Field>
+          <Field label="Plant" required>
+            <Select
+              value={plantId}
+              onChange={(nextPlantId) => {
+                setPlantId(nextPlantId);
+                setTemplateId("");
+                setAnswers({});
+                setDefects({});
+                const nextPlant = plants?.find((item) => item.id === nextPlantId);
+                setProjectId(nextPlant?.currentProjectId ?? projectId);
+              }}
+              allowEmpty
+              emptyLabel="Select plant"
+              options={(plants ?? []).map((item) => ({
+                value: item.id,
+                label: `${item.assetNumber} ${item.type}${[item.make, item.model].filter(Boolean).length ? ` - ${[item.make, item.model].filter(Boolean).join(" ")}` : ""}`,
+              }))}
+            />
+          </Field>
+        </div>
+      )}
+      {plant && loading && <Loading />}
+      {plant && !loading && (templates?.length ?? 0) === 0 && (
         <div className="alert alert-warning">
           No published pre-start template is available. An owner or administrator can publish a generic default under{" "}
           <Link to="/plant/templates">Templates</Link>.
         </div>
       )}
 
-      <div className="form-grid">
+      {plant && <div className="form-grid">
         <Field label="Worker" required hint="Your linked worker is selected by default.">
           <WorkerSelect value={workerId} onChange={setWorkerId} />
         </Field>
@@ -282,18 +323,15 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
             disabled
           />
         </Field>
-        <Field label="Project / location" hint="Defaults from the plant location. Change it here if the plant has moved.">
-          <ProjectSelect value={projectId} onChange={setProjectId} allowEmpty emptyLabel="Not project-specific" activeOnly />
-        </Field>
         <Field
           label={`Hour meter${plant.hourMeter !== null && plant.hourMeter !== undefined ? ` (last ${plant.hourMeter})` : ""}`}
           hint="Cannot move backwards."
         >
           <TextInput value={hourMeter} onChange={setHourMeter} type="number" min={0} inputMode="decimal" />
         </Field>
-      </div>
+      </div>}
 
-      <section className="stack">
+      {plant && <section className="stack">
         <div className="row-between">
           <div>
             <h3>Photos</h3>
@@ -326,7 +364,7 @@ function PreStartModal({ plant, onClose }: { plant: Plant; onClose: () => void }
             ))}
           </div>
         )}
-      </section>
+      </section>}
 
       {template &&
         template.sections.map((section) => (
@@ -465,6 +503,97 @@ function PlantLocationModal({ plant, onClose }: { plant: Plant; onClose: () => v
   );
 }
 
+function WorkerPreStartHistory({
+  page,
+  onPageChange,
+  onNewPreStart,
+}: {
+  page: number;
+  onPageChange: (page: number) => void;
+  onNewPreStart: () => void;
+}) {
+  const { data, loading, error } = useApiQuery<PaginatedResult<PlantPreStartSummary>>("/api/v1/plant/my-pre-starts", {
+    page,
+    pageSize: PRE_START_PAGE_SIZE,
+  });
+  const total = data?.total ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / PRE_START_PAGE_SIZE));
+  const rows = data?.items ?? [];
+
+  useEffect(() => {
+    if (page > pageCount) onPageChange(pageCount);
+  }, [onPageChange, page, pageCount]);
+
+  return (
+    <section className="stack">
+      <div className="worker-prestart-head">
+        <button className="btn btn-accent" onClick={onNewPreStart}>
+          <Icon name="plus" size={15} /> New pre-start
+        </button>
+      </div>
+
+      <ErrorAlert error={error} />
+      {loading && !data && <Loading />}
+      {!loading && rows.length === 0 && (
+        <div className="card">
+          <EmptyState
+            title="No pre-starts yet"
+            hint="Your submitted pre-starts will appear here after you complete one."
+            action={
+              <button className="btn btn-accent" onClick={onNewPreStart}>
+                <Icon name="plus" size={15} /> New pre-start
+              </button>
+            }
+          />
+        </div>
+      )}
+
+      {rows.length > 0 && (
+        <>
+          <div className="prestart-history-list">
+            {rows.map((item) => {
+              const plant = item.plant;
+              const makeModel = [plant.make, plant.model].filter(Boolean).join(" ") || "Make / model not recorded";
+              const location = plant.currentProject ? `${plant.currentProject.code} · ${plant.currentProject.name}` : "Location not recorded";
+              return (
+                <article className="prestart-history-row" key={item.id}>
+                  <div>
+                    <b className="mono">{plant.assetNumber}</b>
+                    <span>{plant.type}</span>
+                  </div>
+                  <div>
+                    <span className="tiny">Make / model</span>
+                    <b>{makeModel}</b>
+                  </div>
+                  <div>
+                    <span className="tiny">Location</span>
+                    <b>{location}</b>
+                  </div>
+                  <div className="prestart-history-meta">
+                    <span className="tiny">{formatDateTime(item.inspectedAt)}</span>
+                    <StatusBadge status={item.result} />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className="pager">
+            <button className="btn btn-ghost btn-sm" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+              Previous
+            </button>
+            <span className="tiny">
+              Page {page} of {pageCount} · {total} pre-start{total === 1 ? "" : "s"}
+            </span>
+            <button className="btn btn-ghost btn-sm" disabled={page >= pageCount} onClick={() => onPageChange(page + 1)}>
+              Next
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
 function ClearanceModal({ plant, onClose }: { plant: Plant; onClose: () => void }) {
   const toast = useToast();
   const [reason, setReason] = useState("");
@@ -517,10 +646,11 @@ export function PlantPage() {
   const canManageTemplates = hasRole(...TEMPLATE_ADMINS);
   const { data, loading, error } = useApiQuery<Plant[]>("/api/v1/plant");
   const [creating, setCreating] = useState(false);
-  const [preStartFor, setPreStartFor] = useState<Plant | null>(null);
+  const [preStartFor, setPreStartFor] = useState<Plant | "new" | null>(null);
   const [locationFor, setLocationFor] = useState<Plant | null>(null);
   const [clearingFor, setClearingFor] = useState<Plant | null>(null);
   const [filter, setFilter] = useState("");
+  const [historyPage, setHistoryPage] = useState(1);
 
   const assets = (data ?? []).filter(
     (plant) =>
@@ -544,9 +674,18 @@ export function PlantPage() {
               <Icon name="plus" size={15} /> Add asset
             </button>
           )}
+          {!canManagePlant && (
+            <button className="btn btn-accent" onClick={() => setPreStartFor("new")}>
+              <Icon name="plus" size={15} /> New pre-start
+            </button>
+          )}
         </div>
       }
     >
+      {!canManagePlant ? (
+        <WorkerPreStartHistory page={historyPage} onPageChange={setHistoryPage} onNewPreStart={() => setPreStartFor("new")} />
+      ) : (
+        <>
       <div className="filter-row">
         <input className="input" style={{ maxWidth: 300 }} placeholder="Search asset number or type…" value={filter} onChange={(e: { target: { value: string } }) => setFilter(e.target.value)} />
         {canManageTemplates && (
@@ -634,9 +773,11 @@ export function PlantPage() {
           </table>
         </div>
       )}
+        </>
+      )}
 
       {creating && <CreatePlantModal onClose={() => setCreating(false)} />}
-      {preStartFor && <PreStartModal plant={preStartFor} onClose={() => setPreStartFor(null)} />}
+      {preStartFor && <PreStartModal plant={preStartFor === "new" ? null : preStartFor} onClose={() => setPreStartFor(null)} />}
       {locationFor && <PlantLocationModal plant={locationFor} onClose={() => setLocationFor(null)} />}
       {clearingFor && <ClearanceModal plant={clearingFor} onClose={() => setClearingFor(null)} />}
     </Layout>

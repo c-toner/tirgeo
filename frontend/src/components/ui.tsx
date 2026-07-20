@@ -230,6 +230,8 @@ const STATUS_TONES: Record<string, string> = {
   IN_USE: "badge-primary",
   DEFECT_REPORTED: "badge-serious",
   OUT_OF_SERVICE: "badge-critical",
+  PASS: "badge-good",
+  DEFECT: "badge-serious",
   // Hazards
   IDENTIFIED: "badge-serious",
   ASSESSED: "badge-warning",

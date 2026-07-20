@@ -267,6 +267,27 @@ export interface PreStartDefect {
   photoIds: string[];
 }
 
+export interface PlantPreStartSummary {
+  id: string;
+  plantId: string;
+  workerId: string;
+  projectId?: string | null;
+  inspectedAt: string;
+  hourMeter?: string | number | null;
+  odometerKm?: number | null;
+  checklistVersion: string;
+  result: InspectionResult;
+  defects?: PreStartDefect[] | null;
+  plant: Pick<Plant, "id" | "assetNumber" | "type" | "make" | "model"> & { currentProject?: Pick<Project, "id" | "code" | "name"> | null };
+}
+
+export interface PaginatedResult<T> {
+  items: T[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export interface ControlMeasure {
   id: string;
   hazardId?: string | null;

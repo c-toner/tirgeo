@@ -749,6 +749,55 @@ table.table {
 }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* ---------- Worker pre-start history ---------- */
+
+.worker-prestart-head {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.prestart-history-list {
+  display: grid;
+  gap: 8px;
+}
+
+.prestart-history-row {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(120px, 1.1fr) minmax(140px, 1fr) minmax(160px, 1.1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px 14px;
+  box-shadow: var(--shadow-1);
+}
+
+.prestart-history-row > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.prestart-history-row b,
+.prestart-history-row span {
+  overflow-wrap: anywhere;
+}
+
+.prestart-history-meta {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 /* ---------- Tabs & filters ---------- */
 
 .tabs {
@@ -1288,6 +1337,17 @@ table.table {
   .kanban-col { min-width: 240px; }
   .login-wrap { grid-template-columns: 1fr; }
   .login-hero { display: none; }
+  .prestart-history-row {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .prestart-history-meta {
+    align-items: flex-start;
+    text-align: left;
+  }
+  .pager {
+    justify-content: space-between;
+  }
   .modal {
     max-height: calc(100dvh - 22px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     border-radius: 12px;
