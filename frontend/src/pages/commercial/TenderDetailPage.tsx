@@ -26,18 +26,32 @@ function UploadCard({ tenderId, onUploaded }: { tenderId: string; onUploaded: ()
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [duplicate, setDuplicate] = useState<{ file: File; warning: string } | null>(null);
 
-  const upload = async (file: File) => {
+  const upload = async (file: File, resetDuplicate = false) => {
     setUploading(true);
     setError(null);
     const formData = new FormData();
     formData.append("file", file);
     try {
-      await api(`/api/v1/commercial/tenders/${tenderId}/documents`, { method: "POST", formData });
-      toast.push("Document analysed — review the suggested requirements");
+      await api(`/api/v1/commercial/tenders/${tenderId}/documents`, {
+        method: "POST",
+        formData,
+        query: resetDuplicate ? { resetDuplicate: true } : undefined,
+      });
+      toast.push(resetDuplicate ? "Document re-analysed — progress has been reset" : "Document analysed — review the suggested requirements");
+      setDuplicate(null);
       onUploaded();
     } catch (err) {
-      setError(err instanceof ApiError ? err : new ApiError(0, String(err)));
+      if (err instanceof ApiError && err.status === 409 && err.code === "DUPLICATE_TENDER_DOCUMENT") {
+        const body = (err.body ?? {}) as { warning?: string };
+        setDuplicate({
+          file,
+          warning: body.warning ?? "You have already uploaded this document. Re-uploading will reset extracted requirements and checklist progress for this document.",
+        });
+      } else {
+        setError(err instanceof ApiError ? err : new ApiError(0, String(err)));
+      }
     } finally {
       setUploading(false);
       if (inputRef.current) inputRef.current.value = "";
@@ -47,6 +61,27 @@ function UploadCard({ tenderId, onUploaded }: { tenderId: string; onUploaded: ()
   return (
     <div className="stack">
       <ErrorAlert error={error} onDismiss={() => setError(null)} />
+      {duplicate && (
+        <Modal
+          title="Re-upload document?"
+          onClose={() => setDuplicate(null)}
+          footer={
+            <>
+              <button className="btn btn-ghost" disabled={uploading} onClick={() => setDuplicate(null)}>
+                Cancel
+              </button>
+              <button className="btn btn-primary" disabled={uploading} onClick={() => upload(duplicate.file, true)}>
+                {uploading ? "Re-analysing…" : "Proceed and reset progress"}
+              </button>
+            </>
+          }
+        >
+          <p>{duplicate.warning}</p>
+          <p className="muted">
+            This only resets requirements and checklist items extracted from this uploaded file. Manual tender checklist items are kept.
+          </p>
+        </Modal>
+      )}
       <div
         className="card card-pad row"
         style={{ borderStyle: "dashed", justifyContent: "center", padding: 26, boxShadow: "none" }}
@@ -64,7 +99,7 @@ function UploadCard({ tenderId, onUploaded }: { tenderId: string; onUploaded: ()
         <button className="btn btn-primary" disabled={uploading} onClick={() => inputRef.current?.click()}>
           <Icon name="upload" size={15} /> {uploading ? "Analysing…" : "Upload tender document"}
         </button>
-        <span className="tiny">PDF, DOCX, XLSX, CSV or text · max 25 MB · duplicates rejected by hash</span>
+        <span className="tiny">PDF, DOCX, XLSX, CSV or text · max 25 MB</span>
       </div>
     </div>
   );
