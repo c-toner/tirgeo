@@ -45,7 +45,7 @@ async function verifyApproverPin(app: FastifyInstance, organisationId: string, a
   if (!(await bcrypt.compare(pin, approver.signaturePinHash))) {
     const attempts = approver.signaturePinFailedAttempts + 1;
     await app.prisma.user.update({ where: { id: approver.id }, data: { signaturePinFailedAttempts: attempts >= 5 ? 0 : attempts, signaturePinLockedUntil: attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null } });
-    throw Object.assign(new Error("Signing PIN is incorrect"), { statusCode: 401 });
+    throw Object.assign(new Error("Signing PIN is incorrect"), { statusCode: 403 });
   }
   await app.prisma.user.update({ where: { id: approver.id }, data: { signaturePinFailedAttempts: 0, signaturePinLockedUntil: null } });
   return approver;
@@ -237,7 +237,7 @@ const routes: FastifyPluginAsync = async app => {
     if (approver.signaturePinLockedUntil && approver.signaturePinLockedUntil > new Date()) return reply.code(429).send({ error: "Supervisor signing PIN is temporarily locked" });
     if (!(await bcrypt.compare(body.pin, approver.signaturePinHash))) {
       const attempts = approver.signaturePinFailedAttempts + 1; await app.prisma.user.update({ where: { id: approver.id }, data: { signaturePinFailedAttempts: attempts >= 5 ? 0 : attempts, signaturePinLockedUntil: attempts >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null } });
-      return reply.code(401).send({ error: "Supervisor verification failed" });
+      return reply.code(403).send({ error: "Supervisor verification failed" });
     }
     await app.prisma.user.update({ where: { id: approver.id }, data: { signaturePinFailedAttempts: 0, signaturePinLockedUntil: null } });
     const existing = await app.prisma.timesheet.findFirstOrThrow({ where: { id, status: Status.SUBMITTED, worker: { userId: req.auth.userId, organisationId: req.auth.organisationId } }, include: { entries: true, approvalRequest: true } });

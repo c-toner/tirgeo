@@ -147,7 +147,7 @@ export async function api<T>(path: string, options: RequestOptions = {}): Promis
       details?: FieldIssue[];
       issues?: unknown[];
     };
-    if (response.status === 401 && getToken() && !path.startsWith("/api/v1/auth/login")) {
+    if (response.status === 401 && getToken() && !path.startsWith("/api/v1/auth/login") && !path.endsWith("/verify-signing-pin")) {
       // Token expired or account revoked — reset the session.
       clearSession();
       onUnauthorised?.();
