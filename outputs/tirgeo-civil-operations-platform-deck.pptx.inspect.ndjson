@@ -1,0 +1,207 @@
+{"kind":"deck","id":"pr/rkadbq","name":"Deck"}
+{"kind":"layout","layoutId":"b184f0b2-9091-4778-8a3b-cfd0ca56ca51","name":"Master","type":"master"}
+{"kind":"layout","layoutId":"7130f5d4-1f94-4c9c-89c5-9de8fe080814","name":"Title Slide","type":"title"}
+{"kind":"slide","id":"sl/xjrh2m","slide":1,"title":"TirGeo","textShapes":6}
+{"kind":"textbox","id":"sh/dkny583m","slide":1,"text":"TirGeo","textPreview":"TirGeo","textChars":6,"textLines":1,"bbox":[42,46,360,76]}
+{"kind":"textbox","id":"sh/qhczad4v","slide":1,"text":"Civil operations platform","textPreview":"Civil operations platform","textChars":25,"textLines":1,"bbox":[42,132,560,38]}
+{"kind":"textbox","id":"sh/bilg3ylg","slide":1,"text":"A field-to-office system for timecards, HSEQ, plant, chainage, payroll, commercial controls and audit-ready project history.","textPreview":"A field-to-office system for timecards, HSEQ, plant, chainage, payroll, commercial controls and audit-ready project history.","textChars":124,"textLines":1,"bbox":[42,228,540,132]}
+{"kind":"textbox","id":"sh/k7ehgnmx","slide":1,"text":"Current product walkthrough and roadmap","textPreview":"Current product walkthrough and roadmap","textChars":39,"textLines":1,"bbox":[42,622,520,30]}
+{"kind":"shape","id":"sh/zm507ilc","slide":1,"bbox":[632,40,2,626]}
+{"kind":"textbox","id":"sh/grah4jmt","slide":1,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/1c3yxo3e","slide":1,"text":"01","textPreview":"01","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"image","id":"im/s3uhobm5","slide":1,"name":"","geometry":"roundRect","alt":"screen-dashboard.png","bbox":[676,42,520,326]}
+{"kind":"image","id":"im/ril0vq5k","slide":1,"name":"","geometry":"roundRect","alt":"screen-cost-tracking.png","bbox":[752,388,444,278]}
+{"kind":"notes","id":"nt/xjrh2m","slide":1,"text":""}
+{"kind":"slide","id":"sl/528oht","slide":2,"title":"WHY THIS MATTERS","textShapes":12}
+{"kind":"textbox","id":"sh/sfelsvup","slide":2,"text":"WHY THIS MATTERS","textPreview":"WHY THIS MATTERS","textChars":16,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/ru5kjqdk","slide":2,"text":"Civil jobs lose margin when field records and cost records drift apart","textPreview":"Civil jobs lose margin when field records and cost records drift apart","textChars":70,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/6tw3qlcz","slide":2,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/5s32hgve","slide":2,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/4rulobut","slide":2,"text":"02","textPreview":"02","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/jqlkf6d8","slide":2,"text":"Project cost visibility","textPreview":"Project cost visibility","textChars":23,"textLines":1,"bbox":[74,220,340,34]}
+{"kind":"textbox","id":"sh/ipc3m1cn","slide":2,"text":"Labour, plant, materials, dockets, accruals and forecast risks need to land against the right project and cost code.","textPreview":"Labour, plant, materials, dockets, accruals and forecast risks need to land against the right project and cost code.","textChars":116,"textLines":1,"bbox":[74,258,438,82]}
+{"kind":"textbox","id":"sh/ho32dwv2","slide":2,"text":"Field adoption","textPreview":"Field adoption","textChars":14,"textLines":1,"bbox":[74,350,340,34]}
+{"kind":"textbox","id":"sh/wnulkrux","slide":2,"text":"Workers need simple screens, obvious create buttons, and drill-down detail only when they ask for it.","textPreview":"Workers need simple screens, obvious create buttons, and drill-down detail only when they ask for it.","textChars":101,"textLines":1,"bbox":[74,388,438,82]}
+{"kind":"textbox","id":"sh/ypsn2t4v","slide":2,"text":"Governance","textPreview":"Governance","textChars":10,"textLines":1,"bbox":[74,480,340,34]}
+{"kind":"textbox","id":"sh/jq14vy50","slide":2,"text":"Civil companies need signatures, photos, decisions and old records retained for later disputes, audits and lookups.","textPreview":"Civil companies need signatures, photos, decisions and old records retained for later disputes, audits and lookups.","textChars":115,"textLines":1,"bbox":[74,518,438,82]}
+{"kind":"shape","id":"sh/kru543ml","slide":2,"bbox":[610,220,548,334]}
+{"kind":"textbox","id":"sh/5s36x8n6","slide":2,"text":"TirGeo's thesis","textPreview":"TirGeo's thesis","textChars":15,"textLines":1,"bbox":[646,258,420,34]}
+{"kind":"textbox","id":"sh/a1sny9oj","slide":2,"text":"Keep the site team moving, while giving the office a structured, auditable record of cost, risk, labour and commercial position.","textPreview":"Keep the site team moving, while giving the office a structured, auditable record of cost, risk, labour and commercial position.","textChars":128,"textLines":1,"bbox":[646,316,430,140]}
+{"kind":"notes","id":"nt/528oht","slide":2,"text":""}
+{"kind":"slide","id":"sl/febhu6","slide":3,"title":"PRODUCT MAP","textShapes":13}
+{"kind":"textbox","id":"sh/6p4vm5kb","slide":3,"text":"PRODUCT MAP","textPreview":"PRODUCT MAP","textChars":11,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/tsvex0j2","slide":3,"text":"The current platform covers the main civil operating loop","textPreview":"The current platform covers the main civil operating loop","textChars":57,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/8rmdof2h","slide":3,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/vuxwza18","slide":3,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/ut4vq5kn","slide":3,"text":"03","textPreview":"03","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"shape","id":"sh/hwfe1kjy","slide":3,"bbox":[74,230,486,116]}
+{"kind":"textbox","id":"sh/gv6dsf2t","slide":3,"text":"Operate","textPreview":"Operate","textChars":7,"textLines":1,"bbox":[102,256,280,32]}
+{"kind":"textbox","id":"sh/bytcnqlo","slide":3,"text":"Projects, daily diary, dashboard and notifications","textPreview":"Projects, daily diary, dashboard and notifications","textChars":50,"textLines":1,"bbox":[102,296,380,42]}
+{"kind":"shape","id":"sh/axkvelk3","slide":3,"bbox":[632,230,486,116]}
+{"kind":"textbox","id":"sh/ovy5kvex","slide":3,"text":"HSEQ","textPreview":"HSEQ","textChars":4,"textLines":1,"bbox":[660,256,280,32]}
+{"kind":"textbox","id":"sh/pw76t0vi","slide":3,"text":"Hazards, observations, inspections, permits, actions and safety sign-ons","textPreview":"Hazards, observations, inspections, permits, actions and safety sign-ons","textChars":72,"textLines":1,"bbox":[660,296,380,42]}
+{"kind":"shape","id":"sh/2tgnilwr","slide":3,"bbox":[74,400,486,116]}
+{"kind":"textbox","id":"sh/nuporqdc","slide":3,"text":"Resources","textPreview":"Resources","textChars":9,"textLines":1,"bbox":[102,426,280,32]}
+{"kind":"textbox","id":"sh/czy5ove9","slide":3,"text":"Plant, pre-starts, photos, chainage, timecards and payroll","textPreview":"Plant, pre-starts, photos, chainage, timecards and payroll","textChars":58,"textLines":1,"bbox":[102,466,380,42]}
+{"kind":"shape","id":"sh/x0r6x0ve","slide":3,"bbox":[632,400,486,116]}
+{"kind":"textbox","id":"sh/axgnmlw3","slide":3,"text":"Commercial","textPreview":"Commercial","textChars":10,"textLines":1,"bbox":[660,426,280,32]}
+{"kind":"textbox","id":"sh/bypovqdo","slide":3,"text":"Tenders, claims, variations, cost plans, actuals and forecasts","textPreview":"Tenders, claims, variations, cost plans, actuals and forecasts","textChars":62,"textLines":1,"bbox":[660,466,380,42]}
+{"kind":"textbox","id":"sh/s3e5cbep","slide":3,"text":"One common account, role and section model controls who sees what across the whole system.","textPreview":"One common account, role and section model controls who sees what across the whole system.","textChars":90,"textLines":1,"bbox":[74,612,980,36]}
+{"kind":"notes","id":"nt/febhu6","slide":3,"text":""}
+{"kind":"slide","id":"sl/iz4f8a","slide":4,"title":"SCREEN WALKTHROUGH","textShapes":7}
+{"kind":"textbox","id":"sh/0baxwnal","slide":4,"text":"SCREEN WALKTHROUGH","textPreview":"SCREEN WALKTHROUGH","textChars":18,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/za1gnit0","slide":4,"text":"The dashboard gives office and field users a practical starting point","textPreview":"The dashboard gives office and field users a practical starting point","textChars":69,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/y9sfudcf","slide":4,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/9g3ytsb2","slide":4,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/8fux0nah","slide":4,"text":"04","textPreview":"04","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/mdsfydsr","slide":4,"text":"What users see","textPreview":"What users see","textChars":14,"textLines":1,"bbox":[880,218,300,30]}
+{"kind":"textbox","id":"sh/pkzyh8by","slide":4,"text":"High-level counts for projects, timecards, hazards and permits sit beside fast actions for the daily work people actually need to do.","textPreview":"High-level counts for projects, timecards, hazards and permits sit beside fast actions for the daily work people actually need to do.","textChars":133,"textLines":1,"bbox":[880,268,300,120]}
+{"kind":"textbox","id":"sh/ojqxo3ud","slide":4,"text":"Notifications now live in the top bar on every page, with unread counts and a red dot, while users can handle items one by one or mark all as read.","textPreview":"Notifications now live in the top bar on every page, with unread counts and a red dot, while users can handle items one by one or mark al...","textChars":147,"textLines":1,"bbox":[880,430,300,150]}
+{"kind":"image","id":"im/exg3ax03","slide":4,"name":"","geometry":"roundRect","alt":"screen-dashboard.png","bbox":[74,210,760,475]}
+{"kind":"notes","id":"nt/iz4f8a","slide":4,"text":""}
+{"kind":"slide","id":"sl/ewrk1n","slide":5,"title":"FIELD EXPERIENCE","textShapes":7}
+{"kind":"textbox","id":"sh/u50v6xsr","slide":5,"text":"FIELD EXPERIENCE","textPreview":"FIELD EXPERIENCE","textChars":16,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/18bu1sr2","slide":5,"text":"Worker screens keep create actions obvious and drill-downs simple","textPreview":"Worker screens keep create actions obvious and drill-downs simple","textChars":65,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/g72d8nax","slide":5,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/729cvi90","slide":5,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/610v2dsf","slide":5,"text":"05","textPreview":"05","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/s3id4nal","slide":5,"text":"Designed for low-friction field use","textPreview":"Designed for low-friction field use","textChars":35,"textLines":1,"bbox":[880,218,312,70]}
+{"kind":"textbox","id":"sh/bydw7m9k","slide":5,"text":"New timecard, register hazard and plant pre-start actions are prominent. Line items open full detail only when the user needs it.","textPreview":"New timecard, register hazard and plant pre-start actions are prominent. Line items open full detail only when the user needs it.","textChars":129,"textLines":1,"bbox":[880,308,312,120]}
+{"kind":"textbox","id":"sh/qxkveh8z","slide":5,"text":"The supervisor signing flow now checks the PIN before signature capture proceeds, reducing failed submissions and shared-device confusion.","textPreview":"The supervisor signing flow now checks the PIN before signature capture proceeds, reducing failed submissions and shared-device confusion.","textChars":138,"textLines":1,"bbox":[880,472,312,120]}
+{"kind":"image","id":"im/sbq9sfep","slide":5,"name":"","geometry":"roundRect","alt":"screen-worker-actions.png","bbox":[74,204,760,475]}
+{"kind":"notes","id":"nt/ewrk1n","slide":5,"text":""}
+{"kind":"slide","id":"sl/16h6df","slide":6,"title":"LABOUR AND PAYROLL","textShapes":5}
+{"kind":"textbox","id":"sh/za9gjapc","slide":6,"text":"LABOUR AND PAYROLL","textPreview":"LABOUR AND PAYROLL","textChars":18,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/kbihsf6x","slide":6,"text":"Timecards and payroll now support both simple selection and robust approval","textPreview":"Timecards and payroll now support both simple selection and robust approval","textChars":75,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/lcrylk7i","slide":6,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/a5gzm5of","slide":6,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/b6pgfap0","slide":6,"text":"06","textPreview":"06","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/2hwziloj","slide":6,"text":"Approvers can open the full timecard, sign, reject, or review detail from the same queue. Payroll exports can be built from approved cards using date ranges and explicit card selection.","textPreview":"Approvers can open the full timecard, sign, reject, or review detail from the same queue. Payroll exports can be built from approved card...","textChars":185,"textLines":1,"bbox":[74,566,1040,58]}
+{"kind":"image","id":"im/1c3a9kj2","slide":6,"name":"","geometry":"roundRect","alt":"screen-worker-actions.png","bbox":[58,205,522,326]}
+{"kind":"image","id":"im/0but0f2h","slide":6,"name":"","geometry":"roundRect","alt":"codex-clipboard-7a88dc6e-7461-44bc-af22-8a5bebf86d0a.png","bbox":[610,205,572,326]}
+{"kind":"notes","id":"nt/16h6df","slide":6,"text":""}
+{"kind":"slide","id":"sl/z1mweb","slide":7,"title":"SAFETY MANAGEMENT","textShapes":9}
+{"kind":"textbox","id":"sh/83a5cjup","slide":7,"text":"SAFETY MANAGEMENT","textPreview":"SAFETY MANAGEMENT","textChars":17,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/ni14jed4","slide":7,"text":"HSEQ work is structured without burying the site team in admin","textPreview":"HSEQ work is structured without burying the site team in admin","textChars":62,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/mhsna9cz","slide":7,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/x83mpovm","slide":7,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/w7u5g3u1","slide":7,"text":"07","textPreview":"07","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/a5snetcv","slide":7,"text":"Current coverage","textPreview":"Current coverage","textChars":16,"textLines":1,"bbox":[880,218,300,32]}
+{"kind":"textbox","id":"sh/5c36t8bi","slide":7,"text":"Hazard register and controls","textPreview":"Hazard register and controls","textChars":28,"textLines":1,"bbox":[902,282,300,28]}
+{"kind":"shape","id":"sh/kbu5k3ux","slide":7,"bbox":[880,288,10,10]}
+{"kind":"textbox","id":"sh/2ps7exgz","slide":7,"text":"Safety observations and incidents","textPreview":"Safety observations and incidents","textChars":33,"textLines":1,"bbox":[902,337,300,28]}
+{"kind":"shape","id":"sh/3q18n2xk","slide":7,"bbox":[880,343,10,10]}
+{"kind":"textbox","id":"sh/ora9g7yp","slide":7,"text":"Inspections and corrective actions","textPreview":"Inspections and corrective actions","textChars":34,"textLines":1,"bbox":[902,392,300,28]}
+{"kind":"shape","id":"sh/psjqpsfa","slide":7,"bbox":[880,398,10,10]}
+{"kind":"textbox","id":"sh/qtcrixgv","slide":7,"text":"Permits and safety document sign-ons","textPreview":"Permits and safety document sign-ons","textChars":36,"textLines":1,"bbox":[902,447,300,28]}
+{"kind":"shape","id":"sh/bul8r2xg","slide":7,"bbox":[880,453,10,10]}
+{"kind":"image","id":"im/upcvq58v","slide":7,"name":"","geometry":"roundRect","alt":"screen-hseq.png","bbox":[74,206,760,475]}
+{"kind":"notes","id":"nt/z1mweb","slide":7,"text":""}
+{"kind":"slide","id":"sl/ueuxik","slide":8,"title":"PLANT AND PRE-STARTS","textShapes":7}
+{"kind":"textbox","id":"sh/bed4fypo","slide":8,"text":"PLANT AND PRE-STARTS","textPreview":"PLANT AND PRE-STARTS","textChars":20,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/cfml8369","slide":8,"text":"Plant pre-starts connect equipment status, checklists and photo evidence","textPreview":"Plant pre-starts connect equipment status, checklists and photo evidence","textChars":72,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/dgvmh87u","slide":8,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/y1o3atof","slide":8,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/z2x4jy50","slide":8,"text":"08","textPreview":"08","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/l4fml8nq","slide":8,"text":"Photos are treated as records, not decoration","textPreview":"Photos are treated as records, not decoration","textChars":45,"textLines":1,"bbox":[880,218,310,70]}
+{"kind":"textbox","id":"sh/m5o3edob","slide":8,"text":"Pre-start images should be stored in Vercel Blob and referenced from the record, which keeps the database lean while preserving the actual evidence.","textPreview":"Pre-start images should be stored in Vercel Blob and referenced from the record, which keeps the database lean while preserving the actua...","textChars":148,"textLines":1,"bbox":[880,306,310,138]}
+{"kind":"textbox","id":"sh/n6x4ni5w","slide":8,"text":"Future offline mode should queue image files locally on-device, upload on sync, then reconcile Blob URLs back to the inspection record.","textPreview":"Future offline mode should queue image files locally on-device, upload on sync, then reconcile Blob URLs back to the inspection record.","textChars":135,"textLines":1,"bbox":[880,488,310,120]}
+{"kind":"image","id":"im/lkvax0ji","slide":8,"name":"","geometry":"roundRect","alt":"screen-plant.png","bbox":[74,206,760,475]}
+{"kind":"notes","id":"nt/ueuxik","slide":8,"text":""}
+{"kind":"slide","id":"sl/0qwk44","slide":9,"title":"CHAINAGE AND FIELD LOCATION","textShapes":7}
+{"kind":"textbox","id":"sh/9gfeh0ji","slide":9,"text":"CHAINAGE AND FIELD LOCATION","textPreview":"CHAINAGE AND FIELD LOCATION","textChars":27,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/mdovmlkr","slide":9,"text":"Chainage brings map-based work items into the same operational record","textPreview":"Chainage brings map-based work items into the same operational record","textChars":69,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/7exwfq1c","slide":9,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/wj6dsfit","slide":9,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/h4zelkje","slide":9,"text":"09","textPreview":"09","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/vixwja18","slide":9,"text":"The intended field behaviour","textPreview":"The intended field behaviour","textChars":28,"textLines":1,"bbox":[880,218,312,34]}
+{"kind":"textbox","id":"sh/cnmdgb2p","slide":9,"text":"Users should pinch, zoom, pan and inspect the map like Google Maps, with work items placed against chainage and project geometry.","textPreview":"Users should pinch, zoom, pan and inspect the map like Google Maps, with work items placed against chainage and project geometry.","textChars":129,"textLines":1,"bbox":[880,276,312,118]}
+{"kind":"textbox","id":"sh/x8ve9gja","slide":9,"text":"This is especially useful for linear assets: roads, drainage, utilities, remediation zones and progressive work fronts.","textPreview":"This is especially useful for linear assets: roads, drainage, utilities, remediation zones and progressive work fronts.","textChars":119,"textLines":1,"bbox":[880,440,312,112]}
+{"kind":"image","id":"im/ral8vq1w","slide":9,"name":"","geometry":"roundRect","alt":"codex-clipboard-7c254ad6-5ec9-4b73-acb1-a6071f8faaa2.png","bbox":[74,204,760,475]}
+{"kind":"notes","id":"nt/0qwk44","slide":9,"text":""}
+{"kind":"slide","id":"sl/hzgwg7","slide":10,"title":"COST AND MARGIN MANAGEMENT","textShapes":10}
+{"kind":"textbox","id":"sh/cnqhszex","slide":10,"text":"COST AND MARGIN MANAGEMENT","textPreview":"COST AND MARGIN MANAGEMENT","textChars":26,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/bmhgjuxc","slide":10,"text":"Commercial cost tracking turns daily project noise into margin control","textPreview":"Commercial cost tracking turns daily project noise into margin control","textChars":70,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/ql8zqpwr","slide":10,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/pkzyhkf6","slide":10,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/ojqhofe1","slide":10,"text":"10","textPreview":"10","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/2x8zm5wv","slide":10,"text":"Implemented commercial controls","textPreview":"Implemented commercial controls","textChars":31,"textLines":1,"bbox":[880,218,320,34]}
+{"kind":"textbox","id":"sh/1wfyd0fa","slide":10,"text":"Cost plans and contingency","textPreview":"Cost plans and contingency","textChars":26,"textLines":1,"bbox":[902,282,300,26]}
+{"kind":"shape","id":"sh/gv6hkvep","slide":10,"bbox":[880,288,10,10]}
+{"kind":"textbox","id":"sh/u5cf29s3","slide":10,"text":"Actual and committed cost entries","textPreview":"Actual and committed cost entries","textChars":33,"textLines":1,"bbox":[902,330,300,26]}
+{"kind":"shape","id":"sh/f65wbeto","slide":10,"bbox":[880,336,10,10]}
+{"kind":"textbox","id":"sh/g7ex4ja9","slide":10,"text":"Forecast confidence","textPreview":"Forecast confidence","textChars":19,"textLines":1,"bbox":[902,378,300,26]}
+{"kind":"shape","id":"sh/h8nedobu","slide":10,"bbox":[880,384,10,10]}
+{"kind":"textbox","id":"sh/6hcfy9s7","slide":10,"text":"Margin status by project","textPreview":"Margin status by project","textChars":24,"textLines":1,"bbox":[902,426,300,26]}
+{"kind":"shape","id":"sh/7ilw7ets","slide":10,"bbox":[880,432,10,10]}
+{"kind":"textbox","id":"sh/sjux0jax","slide":10,"text":"Progress claims and variations","textPreview":"Progress claims and variations","textChars":30,"textLines":1,"bbox":[902,474,300,26]}
+{"kind":"shape","id":"sh/t43e9obi","slide":10,"bbox":[880,480,10,10]}
+{"kind":"image","id":"im/ixg3qhsz","slide":10,"name":"","geometry":"roundRect","alt":"screen-cost-tracking.png","bbox":[74,204,760,475]}
+{"kind":"notes","id":"nt/hzgwg7","slide":10,"text":""}
+{"kind":"slide","id":"sl/iu5tjq","slide":11,"title":"TENDERS AND DOCUMENTS","textShapes":7}
+{"kind":"textbox","id":"sh/w76x4r6t","slide":11,"text":"TENDERS AND DOCUMENTS","textPreview":"TENDERS AND DOCUMENTS","textChars":21,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/bmxwvmp8","slide":11,"text":"Tender document handling is becoming an auditable commercial workflow","textPreview":"Tender document handling is becoming an auditable commercial workflow","textChars":69,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/alof2hon","slide":11,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/lczy1w7a","slide":11,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/kbqx8b6p","slide":11,"text":"11","textPreview":"11","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"shape","id":"sh/y98f61oj","slide":11,"bbox":[760,204,380,412]}
+{"kind":"textbox","id":"sh/tgjy5g76","slide":11,"text":"Current behaviour","textPreview":"Current behaviour","textChars":17,"textLines":1,"bbox":[790,238,280,34]}
+{"kind":"textbox","id":"sh/8fqxcb61","slide":11,"text":"Users get a duplicate warning before re-uploading a tender document. Re-analysis resets active extracted progress, while historical requirements are superseded rather than deleted.","textPreview":"Users get a duplicate warning before re-uploading a tender document. Re-analysis resets active extracted progress, while historical requi...","textChars":180,"textLines":1,"bbox":[790,302,296,138]}
+{"kind":"textbox","id":"sh/29oni1sf","slide":11,"text":"The PDF worker and server canvas fixes support Vercel deployment, so failed analysis can be surfaced clearly rather than looping the upload prompt.","textPreview":"The PDF worker and server canvas fixes support Vercel deployment, so failed analysis can be surfaced clearly rather than looping the uplo...","textChars":147,"textLines":1,"bbox":[790,476,296,106]}
+{"kind":"image","id":"im/6l43qpof","slide":11,"name":"","geometry":"roundRect","alt":"codex-clipboard-c48954fc-b343-41df-947f-99b77e53c44c.png","bbox":[58,204,660,412]}
+{"kind":"notes","id":"nt/iu5tjq","slide":11,"text":""}
+{"kind":"slide","id":"sl/n4ytk4","slide":12,"title":"TRUST MODEL","textShapes":12}
+{"kind":"textbox","id":"sh/e5sn2dgj","slide":12,"text":"TRUST MODEL","textPreview":"TRUST MODEL","textChars":11,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/1sj6x8fa","slide":12,"text":"Security and audit choices are being built into everyday flows","textPreview":"Security and audit choices are being built into everyday flows","textChars":62,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/0ra54nyp","slide":12,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/nu1ozix0","slide":12,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/mtsn6dgf","slide":12,"text":"12","textPreview":"12","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/ova58nyl","slide":12,"text":"Role and section access","textPreview":"Role and section access","textChars":23,"textLines":1,"bbox":[790,218,340,28]}
+{"kind":"textbox","id":"sh/3yh4nyxw","slide":12,"text":"Owners and admins manage who can see each module.","textPreview":"Owners and admins manage who can see each module.","textChars":49,"textLines":1,"bbox":[790,252,340,42]}
+{"kind":"textbox","id":"sh/2xonutgb","slide":12,"text":"Soft deactivation","textPreview":"Soft deactivation","textChars":17,"textLines":1,"bbox":[790,316,340,28]}
+{"kind":"textbox","id":"sh/47yxwrmd","slide":12,"text":"Users are deactivated instead of deleted, preventing broken history.","textPreview":"Users are deactivated instead of deleted, preventing broken history.","textChars":68,"textLines":1,"bbox":[790,350,340,42]}
+{"kind":"textbox","id":"sh/587ypcny","slide":12,"text":"Audit-safe deletion","textPreview":"Audit-safe deletion","textChars":19,"textLines":1,"bbox":[790,414,340,28]}
+{"kind":"textbox","id":"sh/i5gfuh47","slide":12,"text":"Records and blobs are archived or superseded where history matters.","textPreview":"Records and blobs are archived or superseded where history matters.","textChars":67,"textLines":1,"bbox":[790,448,340,42]}
+{"kind":"textbox","id":"sh/j6pgnm5s","slide":12,"text":"PIN recovery","textPreview":"PIN recovery","textChars":12,"textLines":1,"bbox":[790,512,340,28]}
+{"kind":"textbox","id":"sh/sbix0rm9","slide":12,"text":"Forgotten signing PINs can be reset by confirming the account password.","textPreview":"Forgotten signing PINs can be reset by confirming the account password.","textChars":71,"textLines":1,"bbox":[790,546,340,42]}
+{"kind":"image","id":"im/4vmtcz6x","slide":12,"name":"","geometry":"roundRect","alt":"screen-settings.png","bbox":[74,206,664,415]}
+{"kind":"notes","id":"nt/n4ytk4","slide":12,"text":""}
+{"kind":"slide","id":"sl/nutmyo","slide":13,"title":"ROADMAP","textShapes":5}
+{"kind":"textbox","id":"sh/w3690vel","slide":13,"text":"ROADMAP","textPreview":"ROADMAP","textChars":7,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/v2xsrqd0","slide":13,"text":"The roadmap should deepen civil-specific control, not add generic software clutter","textPreview":"The roadmap should deepen civil-specific control, not add generic software clutter","textChars":82,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/a1orylwf","slide":13,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/90fapgvu","slide":13,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/8z69wbep","slide":13,"text":"13","textPreview":"13","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/mx4ru1wj","slide":13,"text":"Priority should go to features that remove field friction, strengthen commercial confidence, and protect historical evidence.","textPreview":"Priority should go to features that remove field friction, strengthen commercial confidence, and protect historical evidence.","textChars":125,"textLines":1,"bbox":[74,612,1000,36]}
+{"kind":"image","id":"im/mdsfq5of","slide":13,"name":"","geometry":"roundRect","alt":"roadmap-tiles.png","bbox":[74,194,1032,460]}
+{"kind":"notes","id":"nt/nutmyo","slide":13,"text":""}
+{"kind":"slide","id":"sl/5wbmnc","slide":14,"title":"NEAR-TERM RELEASE SHAPE","textShapes":16}
+{"kind":"textbox","id":"sh/svqp4rip","slide":14,"text":"NEAR-TERM RELEASE SHAPE","textPreview":"NEAR-TERM RELEASE SHAPE","textChars":23,"textLines":1,"bbox":[42,34,420,24]}
+{"kind":"textbox","id":"sh/ruh8bmh4","slide":14,"text":"Recommended next build priorities","textPreview":"Recommended next build priorities","textChars":33,"textLines":1,"bbox":[42,72,800,92]}
+{"kind":"shape","id":"sh/qt872h0j","slide":14,"bbox":[42,164,1196,1]}
+{"kind":"textbox","id":"sh/5sz69wzy","slide":14,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/4rqp0rid","slide":14,"text":"14","textPreview":"14","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"textbox","id":"sh/3qho7mh8","slide":14,"text":"1","textPreview":"1","textChars":1,"textLines":1,"bbox":[74,218,42,36]}
+{"kind":"textbox","id":"sh/ip87yh0n","slide":14,"text":"Offline capture and sync","textPreview":"Offline capture and sync","textChars":24,"textLines":1,"bbox":[132,218,360,32]}
+{"kind":"textbox","id":"sh/hoz65cz2","slide":14,"text":"Timecards, pre-start photos, hazards, observations and daily diary entries continue working on poor reception sites.","textPreview":"Timecards, pre-start photos, hazards, observations and daily diary entries continue working on poor reception sites.","textChars":116,"textLines":1,"bbox":[520,218,560,52]}
+{"kind":"shape","id":"sh/gn6pw7ih","slide":14,"bbox":[74,290,1040,1]}
+{"kind":"textbox","id":"sh/694jyhwv","slide":14,"text":"2","textPreview":"2","textChars":1,"textLines":1,"bbox":[74,310,42,36]}
+{"kind":"textbox","id":"sh/radk72xg","slide":14,"text":"Email notifications","textPreview":"Email notifications","textChars":19,"textLines":1,"bbox":[132,310,360,32]}
+{"kind":"textbox","id":"sh/sbm107e1","slide":14,"text":"Send approval, safety, tender and payroll alerts through a verified organisation mailbox.","textPreview":"Send approval, safety, tender and payroll alerts through a verified organisation mailbox.","textChars":89,"textLines":1,"bbox":[520,310,560,52]}
+{"kind":"shape","id":"sh/dcv29cf6","slide":14,"bbox":[74,382,1040,1]}
+{"kind":"textbox","id":"sh/ilkjuxwj","slide":14,"text":"3","textPreview":"3","textChars":1,"textLines":1,"bbox":[74,402,42,36]}
+{"kind":"textbox","id":"sh/jmtk32x4","slide":14,"text":"Cost commitment workflow","textPreview":"Cost commitment workflow","textChars":24,"textLines":1,"bbox":[132,402,360,32]}
+{"kind":"textbox","id":"sh/4n21w7ep","slide":14,"text":"Purchase orders, delivery dockets, accruals and subcontractor claims flow into margin reporting.","textPreview":"Purchase orders, delivery dockets, accruals and subcontractor claims flow into margin reporting.","textChars":96,"textLines":1,"bbox":[520,402,560,52]}
+{"kind":"shape","id":"sh/5ob25cfa","slide":14,"bbox":[74,474,1040,1]}
+{"kind":"textbox","id":"sh/uhkjqxgn","slide":14,"text":"4","textPreview":"4","textChars":1,"textLines":1,"bbox":[74,494,42,36]}
+{"kind":"textbox","id":"sh/vit0zix8","slide":14,"text":"Document register maturity","textPreview":"Document register maturity","textChars":26,"textLines":1,"bbox":[132,494,360,32]}
+{"kind":"textbox","id":"sh/za58bu9o","slide":14,"text":"Drawing revisions, RFIs, submittals, addenda and tender clarifications become tracked records.","textPreview":"Drawing revisions, RFIs, submittals, addenda and tender clarifications become tracked records.","textChars":94,"textLines":1,"bbox":[520,494,560,52]}
+{"kind":"shape","id":"sh/y9w7ip83","slide":14,"bbox":[74,566,1040,1]}
+{"kind":"notes","id":"nt/5wbmnc","slide":14,"text":""}
+{"kind":"slide","id":"sl/qhbtm5","slide":15,"title":"TirGeo is shaping into the civil company's daily control room.","textShapes":4}
+{"kind":"textbox","id":"sh/tgru9g7u","slide":15,"text":"TirGeo is shaping into the civil company's daily control room.","textPreview":"TirGeo is shaping into the civil company's daily control room.","textChars":62,"textLines":1,"bbox":[42,92,980,150]}
+{"kind":"textbox","id":"sh/6d0be183","slide":15,"text":"The strongest next move is to make the field experience resilient offline, then tighten cost commitments, communications and document governance around the same audit-first record.","textPreview":"The strongest next move is to make the field experience resilient offline, then tighten cost commitments, communications and document gov...","textChars":180,"textLines":1,"bbox":[42,310,820,120]}
+{"kind":"textbox","id":"sh/kbitcrqx","slide":15,"text":"TirGeo civil operations platform","textPreview":"TirGeo civil operations platform","textChars":32,"textLines":1,"bbox":[42,682,360,20]}
+{"kind":"textbox","id":"sh/lcru5w7i","slide":15,"text":"15","textPreview":"15","textChars":2,"textLines":1,"bbox":[1190,682,48,20]}
+{"kind":"image","id":"im/etofepcj","slide":15,"name":"","geometry":"roundRect","alt":"screen-cost-tracking.png","bbox":[804,394,360,226]}
+{"kind":"notes","id":"nt/qhbtm5","slide":15,"text":""}
