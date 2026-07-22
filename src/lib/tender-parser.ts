@@ -5,11 +5,17 @@ export type SourceSection = { text: string; page?: number; sheet?: string };
 export type ParsedTender = { sections: SourceSection[]; pageCount?: number };
 
 async function ensurePdfDomPolyfills() {
-  if (typeof globalThis.DOMMatrix !== "undefined" && typeof globalThis.ImageData !== "undefined" && typeof globalThis.Path2D !== "undefined") return;
-  const canvas = await import("@napi-rs/canvas");
-  globalThis.DOMMatrix ??= canvas.DOMMatrix as typeof globalThis.DOMMatrix;
-  globalThis.ImageData ??= canvas.ImageData as typeof globalThis.ImageData;
-  globalThis.Path2D ??= canvas.Path2D as typeof globalThis.Path2D;
+  const globals = globalThis as typeof globalThis & { pdfjsWorker?: { WorkerMessageHandler: unknown } };
+  if (typeof globalThis.DOMMatrix === "undefined" || typeof globalThis.ImageData === "undefined" || typeof globalThis.Path2D === "undefined") {
+    const canvas = await import("@napi-rs/canvas");
+    globalThis.DOMMatrix ??= canvas.DOMMatrix as typeof globalThis.DOMMatrix;
+    globalThis.ImageData ??= canvas.ImageData as typeof globalThis.ImageData;
+    globalThis.Path2D ??= canvas.Path2D as typeof globalThis.Path2D;
+  }
+  if (!globals.pdfjsWorker?.WorkerMessageHandler) {
+    const worker = await import("pdfjs-dist/legacy/build/pdf.worker.mjs");
+    globals.pdfjsWorker = { WorkerMessageHandler: worker.WorkerMessageHandler };
+  }
 }
 
 export async function extractTenderText(buffer: Buffer, mimeType: string, filename: string): Promise<ParsedTender> {

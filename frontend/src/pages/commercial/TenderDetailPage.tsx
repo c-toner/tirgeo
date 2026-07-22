@@ -43,13 +43,14 @@ function UploadCard({ tenderId, onUploaded }: { tenderId: string; onUploaded: ()
       setDuplicate(null);
       onUploaded();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409 && err.code === "DUPLICATE_TENDER_DOCUMENT") {
+      if (!resetDuplicate && err instanceof ApiError && err.status === 409 && err.code === "DUPLICATE_TENDER_DOCUMENT") {
         const body = (err.body ?? {}) as { warning?: string };
         setDuplicate({
           file,
           warning: body.warning ?? "You have already uploaded this document. Re-uploading will reset extracted requirements and checklist progress for this document.",
         });
       } else {
+        setDuplicate(null);
         setError(err instanceof ApiError ? err : new ApiError(0, String(err)));
       }
     } finally {
