@@ -4,6 +4,14 @@ import ExcelJS from "exceljs";
 export type SourceSection = { text: string; page?: number; sheet?: string };
 export type ParsedTender = { sections: SourceSection[]; pageCount?: number };
 
+async function ensurePdfDomPolyfills() {
+  if (typeof globalThis.DOMMatrix !== "undefined" && typeof globalThis.ImageData !== "undefined" && typeof globalThis.Path2D !== "undefined") return;
+  const canvas = await import("@napi-rs/canvas");
+  globalThis.DOMMatrix ??= canvas.DOMMatrix as typeof globalThis.DOMMatrix;
+  globalThis.ImageData ??= canvas.ImageData as typeof globalThis.ImageData;
+  globalThis.Path2D ??= canvas.Path2D as typeof globalThis.Path2D;
+}
+
 export async function extractTenderText(buffer: Buffer, mimeType: string, filename: string): Promise<ParsedTender> {
   const ext = filename.toLowerCase().split(".").pop();
   const isPdf = buffer.subarray(0, 5).toString("ascii") === "%PDF-"; const isZip = buffer[0] === 0x50 && buffer[1] === 0x4b;
@@ -11,6 +19,7 @@ export async function extractTenderText(buffer: Buffer, mimeType: string, filena
   if (["docx", "xlsx"].includes(ext ?? "") && !isZip) throw Object.assign(new Error("File content is not a valid Office document"), { statusCode: 415 });
   if (["txt", "csv"].includes(ext ?? "") && buffer.includes(0)) throw Object.assign(new Error("Text files cannot contain binary data"), { statusCode: 415 });
   if (mimeType === "application/pdf" || ext === "pdf") {
+    await ensurePdfDomPolyfills();
     const { PDFParse } = await import("pdf-parse");
     const parser = new PDFParse({ data: buffer });
     try {
