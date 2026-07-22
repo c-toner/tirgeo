@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Layout } from "../../components/Layout.tsx";
 import { ProjectSelect } from "../../components/ProjectSelect.tsx";
 import {
@@ -23,6 +23,8 @@ import { formatDate, formatDateTime, minutesToHours, titleCase, uuid } from "../
 import { usePath } from "../../lib/router.tsx";
 import type { ApproverSummary, Timesheet } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
+
+const MANAGER_ROLES = ["PROJECT_MANAGER", "OPERATIONS_MANAGER"];
 
 interface EntryDraft {
   id: string;
@@ -106,18 +108,24 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [projectId, setProjectId] = useState("");
   const [workerId, setWorkerId] = useState("");
   const [entries, setEntries] = useState<EntryDraft[]>([newEntry()]);
-  const [signedName, setSignedName] = useState(user?.name ?? "");
-  const [signature, setSignature] = useState<SignatureValue | null>(null);
-  const [consent, setConsent] = useState(false);
-  const [lodgedTimesheet, setLodgedTimesheet] = useState<Timesheet | null>(null);
   const [approvalMode, setApprovalMode] = useState<"request" | "onsite" | null>(null);
   const [approverUserId, setApproverUserId] = useState("");
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
   const [verifyingPin, setVerifyingPin] = useState(false);
+  const [onsiteVerified, setOnsiteVerified] = useState(false);
   const [approverName, setApproverName] = useState("");
   const [approverSignature, setApproverSignature] = useState<SignatureValue | null>(null);
+  const [signedName, setSignedName] = useState(user?.name ?? "");
+  const [signature, setSignature] = useState<SignatureValue | null>(null);
+  const [consent, setConsent] = useState(false);
   const weekEnding = weekEndingForEntries(entries);
+
+  useEffect(() => {
+    if (!approverUserId && approvers?.[0]) setApproverUserId(approvers[0].id);
+    if (!approvalMode && user?.role === "OWNER") setApprovalMode("onsite");
+    if (!approvalMode && user?.role && MANAGER_ROLES.includes(user.role)) setApprovalMode("request");
+  }, [approvalMode, approverUserId, approvers, user?.role]);
 
   const patch = (index: number, changes: Partial<EntryDraft>) =>
     setEntries((list) => list.map((entry, i) => (i === index ? { ...entry, ...changes } : entry)));
@@ -146,10 +154,7 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
           unpaidBreakMinutes: Number(entry.breakMinutes) || 0,
           ordinaryMinutes: minutes.ordinary,
           overtimeMinutes: minutes.overtime,
-          allowanceCodes: entry.allowances
-            .split(",")
-            .map((code) => code.trim())
-            .filter(Boolean),
+          allowanceCodes: entry.allowances.split(",").map((code) => code.trim()).filter(Boolean),
           notes: entry.notes.trim() || undefined,
         };
       }),
@@ -159,48 +164,62 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
     () =>
       api<Timesheet>("/api/v1/timesheets/lodge", {
         method: "POST",
+        body: { ...createPayload(), approverUserId, signedName: signedName.trim(), signature: signature!.signature, signatureMethod: signature!.signatureMethod, consent: true },
+      }),
+    ["/api/v1/notifications", "/api/v1/timesheets"],
+  );
+  const onsiteMutation = useMutation(
+    () =>
+      api<Timesheet>("/api/v1/timesheets/lodge-onsite-approve", {
+        method: "POST",
         body: {
           ...createPayload(),
+          approverUserId,
+          pin,
+          approverSignedName: approverName.trim(),
+          approverSignature: approverSignature!.signature,
+          approverSignatureMethod: approverSignature!.signatureMethod,
+          approverConsent: true,
           signedName: signedName.trim(),
           signature: signature!.signature,
           signatureMethod: signature!.signatureMethod,
           consent: true,
         },
       }),
-    ["/api/v1/timesheets"],
-  );
-  const requestMutation = useMutation(
-    () => api(`/api/v1/timesheets/${lodgedTimesheet!.id}/request-approval`, { method: "POST", body: { approverUserId } }),
-    ["/api/v1/notifications", "/api/v1/timesheets"],
-  );
-  const onsiteMutation = useMutation(
-    () =>
-      api<Timesheet>(`/api/v1/timesheets/${lodgedTimesheet!.id}/onsite-approve`, {
-        method: "POST",
-        body: {
-          approverUserId,
-          pin,
-          signedName: approverName.trim(),
-          signature: approverSignature!.signature,
-          signatureMethod: approverSignature!.signatureMethod,
-          consent: true,
-        },
-      }),
     ["/api/v1/notifications", "/api/v1/timesheets"],
   );
 
-  const error = lodgeMutation.error || requestMutation.error || onsiteMutation.error;
-  const issues = (lodgeMutation.error?.body as { issues?: Array<{ message?: string; entryId?: string }> } | undefined)?.issues;
-  const canLodge = Boolean(
-    !lodgedTimesheet &&
-    projectId &&
-    workerId.trim() &&
-    weekEnding &&
-    entries.some((entry) => entry.workDate) &&
-    signedName.trim().length >= 2 &&
-    signature &&
-    consent,
-  );
+  const error = lodgeMutation.error || onsiteMutation.error;
+  const issues = ((lodgeMutation.error ?? onsiteMutation.error)?.body as { issues?: Array<{ message?: string; entryId?: string }> } | undefined)?.issues;
+  const supervisorHandled = Boolean((approvalMode === "request" && approverUserId) || (approvalMode === "onsite" && onsiteVerified));
+  const canSubmit = Boolean(projectId && workerId.trim() && weekEnding && entries.some((entry) => entry.workDate) && supervisorHandled && signedName.trim().length >= 2 && signature && consent);
+
+  const resetSupervisorVerification = () => setOnsiteVerified(false);
+  const verifyOnsiteSupervisor = async () => {
+    if (!approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2) return;
+    setVerifyingPin(true);
+    setPinError(null);
+    resetSupervisorVerification();
+    const error = await verifySigningPin(approverUserId, pin);
+    setVerifyingPin(false);
+    if (error) {
+      setPinError(error);
+      return;
+    }
+    setOnsiteVerified(true);
+    toast.push("Supervisor signature verified");
+  };
+
+  const submit = () => {
+    const mutation = approvalMode === "onsite" ? onsiteMutation : lodgeMutation;
+    mutation.run({
+      onSuccess: (timesheet) => {
+        toast.push(approvalMode === "onsite" ? "Timecard signed and approved" : "Timecard lodged and signature requested");
+        onCreated(timesheet as Timesheet);
+        onClose();
+      },
+    });
+  };
 
   return (
     <Modal
@@ -214,197 +233,102 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
               Ordinary <b>{minutesToHours(totals.ordinary)}h</b> · Overtime <b>{minutesToHours(totals.overtime)}h</b>
             </span>
           </div>
-          <button className="btn btn-ghost" onClick={onClose}>
-            {lodgedTimesheet ? "Done" : "Cancel"}
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={lodgeMutation.running || onsiteMutation.running || !canSubmit} onClick={submit}>
+            {lodgeMutation.running || onsiteMutation.running ? "Submitting..." : approvalMode === "onsite" ? "Sign & approve timecard" : "Sign & request supervisor"}
           </button>
-          {!lodgedTimesheet && (
-            <button
-              className="btn btn-primary"
-              disabled={lodgeMutation.running || !canLodge}
-              onClick={() =>
-                lodgeMutation.run({
-                  onSuccess: (timesheet) => {
-                    setLodgedTimesheet(timesheet);
-                    toast.push("Timecard lodged");
-                    onCreated(timesheet);
-                  },
-                })
-              }
-            >
-              {lodgeMutation.running ? "Lodging..." : "Sign timecard"}
-            </button>
-          )}
-          {lodgedTimesheet && approvalMode === "request" && (
-            <button
-              className="btn btn-primary"
-              disabled={requestMutation.running || !approverUserId}
-              onClick={() =>
-                requestMutation.run({
-                  onSuccess: () => {
-                    toast.push("Signature requested");
-                    onClose();
-                  },
-                })
-              }
-            >
-              {requestMutation.running ? "Requesting..." : "Request signature"}
-            </button>
-          )}
-          {lodgedTimesheet && approvalMode === "onsite" && (
-            <button
-              className="btn btn-primary"
-              disabled={verifyingPin || onsiteMutation.running || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2}
-              onClick={async () => {
-                setVerifyingPin(true);
-                setPinError(null);
-                const error = await verifySigningPin(approverUserId, pin);
-                setVerifyingPin(false);
-                if (error) {
-                  setPinError(error);
-                  return;
-                }
-                onsiteMutation.run({
-                  onSuccess: () => {
-                    toast.push("Timecard approved on site");
-                    onClose();
-                  },
-                });
-              }}
-            >
-              {verifyingPin ? "Checking PIN..." : onsiteMutation.running ? "Signing..." : "Add signature & approve"}
-            </button>
-          )}
         </>
       }
     >
-      <ErrorAlert error={error} onDismiss={() => { lodgeMutation.reset(); requestMutation.reset(); onsiteMutation.reset(); }} />
+      <ErrorAlert error={error} onDismiss={() => { lodgeMutation.reset(); onsiteMutation.reset(); }} />
       {issues && issues.length > 0 && (
         <div className="alert alert-warning">
           <div>
             <b>Entry validation issues</b>
-            {issues.map((issue, index) => (
-              <div key={index} style={{ fontWeight: 400 }}>
-                • {issue.message}
-              </div>
-            ))}
+            {issues.map((issue, index) => <div key={index} style={{ fontWeight: 400 }}>• {issue.message}</div>)}
           </div>
         </div>
       )}
-      {!lodgedTimesheet ? (
-        <>
-          <div className="form-grid">
-            <Field label="Project" required>
-              <ProjectSelect value={projectId} onChange={setProjectId} allowEmpty emptyLabel="— Select project —" activeOnly />
-            </Field>
-            <Field label="Worker" required span2 hint="Your linked worker is selected by default. Workers can only lodge their own timecards.">
-              <WorkerSelect value={workerId} onChange={setWorkerId} />
-            </Field>
-          </div>
 
-          <div className="row-between">
-            <div>
-              <h3>Daily timecards</h3>
-              <span className="tiny">Do today, yesterday, or add several days for the week in one go.</span>
+      <div className="form-grid">
+        <Field label="Project" required>
+          <ProjectSelect value={projectId} onChange={setProjectId} allowEmpty emptyLabel="— Select project —" activeOnly />
+        </Field>
+        <Field label="Worker" required span2 hint="Your linked worker is selected by default. Workers can only lodge their own timecards.">
+          <WorkerSelect value={workerId} onChange={setWorkerId} />
+        </Field>
+      </div>
+
+      <div className="row-between">
+        <div>
+          <h3>Daily timecards</h3>
+          <span className="tiny">Do today, yesterday, or add several days for the week in one go.</span>
+        </div>
+        <div className="row">
+          <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry(localDate())])}>Today</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry(yesterday())])}>Yesterday</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry()])}><Icon name="plus" size={13} /> Add day</button>
+        </div>
+      </div>
+
+      {entries.map((entry, index) => {
+        const minutes = entryMinutes(entry);
+        return (
+          <div key={entry.id} className="card card-pad stack" style={{ boxShadow: "none", gap: 10 }}>
+            <div className="row" style={{ alignItems: "flex-end" }}>
+              <Field label="Work date" required><TextInput value={entry.workDate} onChange={(value) => patch(index, { workDate: value })} type="date" /></Field>
+              <Field label="Start"><TextInput value={entry.start} onChange={(value) => patch(index, { start: value })} type="time" /></Field>
+              <Field label="Finish"><TextInput value={entry.finish} onChange={(value) => patch(index, { finish: value })} type="time" /></Field>
+              <Field label="Break (min)"><TextInput value={entry.breakMinutes} onChange={(value) => patch(index, { breakMinutes: value })} type="number" min={0} inputMode="numeric" /></Field>
+              <Field label="Overtime (min)"><TextInput value={entry.overtimeMinutes} onChange={(value) => patch(index, { overtimeMinutes: value })} type="number" min={0} inputMode="numeric" /></Field>
+              <button className="btn-icon" style={{ marginBottom: 4 }} aria-label="Remove shift" onClick={() => setEntries((list) => list.filter((_, i) => i !== index))} disabled={entries.length === 1}><Icon name="x" size={14} /></button>
             </div>
             <div className="row">
-              <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry(localDate())])}>
-                Today
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry(yesterday())])}>
-                Yesterday
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry()])}>
-                <Icon name="plus" size={13} /> Add day
-              </button>
+              <Field label="Allowance codes (comma-separated)"><TextInput value={entry.allowances} onChange={(value) => patch(index, { allowances: value })} placeholder="e.g. TRAVEL, MEAL" /></Field>
+              <Field label="Notes"><TextInput value={entry.notes} onChange={(value) => patch(index, { notes: value })} /></Field>
             </div>
+            <span className="tiny">Worked {minutesToHours(minutes.elapsed)}h → ordinary {minutesToHours(minutes.ordinary)}h + overtime {minutesToHours(minutes.overtime)}h</span>
           </div>
+        );
+      })}
 
-          {entries.map((entry, index) => {
-            const minutes = entryMinutes(entry);
-            return (
-              <div key={entry.id} className="card card-pad stack" style={{ boxShadow: "none", gap: 10 }}>
-                <div className="row" style={{ alignItems: "flex-end" }}>
-                  <Field label="Work date" required>
-                    <TextInput value={entry.workDate} onChange={(value) => patch(index, { workDate: value })} type="date" />
-                  </Field>
-                  <Field label="Start">
-                    <TextInput value={entry.start} onChange={(value) => patch(index, { start: value })} type="time" />
-                  </Field>
-                  <Field label="Finish">
-                    <TextInput value={entry.finish} onChange={(value) => patch(index, { finish: value })} type="time" />
-                  </Field>
-                  <Field label="Break (min)">
-                    <TextInput value={entry.breakMinutes} onChange={(value) => patch(index, { breakMinutes: value })} type="number" min={0} inputMode="numeric" />
-                  </Field>
-                  <Field label="Overtime (min)">
-                    <TextInput value={entry.overtimeMinutes} onChange={(value) => patch(index, { overtimeMinutes: value })} type="number" min={0} inputMode="numeric" />
-                  </Field>
-                  <button className="btn-icon" style={{ marginBottom: 4 }} aria-label="Remove shift" onClick={() => setEntries((list) => list.filter((_, i) => i !== index))} disabled={entries.length === 1}>
-                    <Icon name="x" size={14} />
-                  </button>
-                </div>
-                <div className="row">
-                  <Field label="Allowance codes (comma-separated)">
-                    <TextInput value={entry.allowances} onChange={(value) => patch(index, { allowances: value })} placeholder="e.g. TRAVEL, MEAL" />
-                  </Field>
-                  <Field label="Notes">
-                    <TextInput value={entry.notes} onChange={(value) => patch(index, { notes: value })} />
-                  </Field>
-                </div>
-                <span className="tiny">
-                  Worked {minutesToHours(minutes.elapsed)}h → ordinary {minutesToHours(minutes.ordinary)}h + overtime {minutesToHours(minutes.overtime)}h
-                </span>
-              </div>
-            );
-          })}
-
-          <div className="stack">
-            <h3>Sign</h3>
-            <SignaturePad signedName={signedName} onNameChange={setSignedName} onChange={setSignature} />
-            <label className="row" style={{ gap: 8, alignItems: "flex-start", fontSize: 13 }}>
-              <input type="checkbox" checked={consent} onChange={(e: { target: { checked: boolean } }) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
-              <span>I confirm this timecard is a complete and accurate record of the hours I worked.</span>
-            </label>
-          </div>
-        </>
-      ) : (
-        <div className="stack">
-          <div className="alert alert-info">
-            Timecard lodged. Pick how the manager or supervisor will countersign it.
-          </div>
-          <div className="seg" style={{ width: "fit-content" }}>
-            <button type="button" className={approvalMode === "onsite" ? "on-pass" : ""} onClick={() => setApprovalMode("onsite")}>
-              Add signature + PIN
-            </button>
-            <button type="button" className={approvalMode === "request" ? "on-pass" : ""} onClick={() => setApprovalMode("request")}>
-              Request signature
-            </button>
-          </div>
-          {approvalMode && (
-            <Field label="Approver" required hint="Owner, admin, PM, supervisor or foreman.">
-              <Select
-                value={approverUserId}
-                onChange={(value) => {
-                  setApproverUserId(value);
-                  setPinError(null);
-                }}
-                allowEmpty
-                emptyLabel="— Select approver —"
-                options={(approvers ?? []).map((approver) => ({
-                  value: approver.id,
-                  label: `${approver.name} (${titleCase(approver.role)})`,
-                }))}
-              />
+      <div className="stack">
+        <h3>Supervisor signature</h3>
+        <Field label="Supervisor" required hint="Pick who will approve this timecard before you sign it.">
+          <Select
+            value={approverUserId}
+            onChange={(value) => { setApproverUserId(value); setPinError(null); resetSupervisorVerification(); }}
+            allowEmpty
+            emptyLabel="— Select supervisor —"
+            options={(approvers ?? []).map((approver) => ({ value: approver.id, label: `${approver.name} (${titleCase(approver.role)})` }))}
+          />
+        </Field>
+        <div className="seg" style={{ width: "fit-content" }}>
+          <button type="button" className={approvalMode === "request" ? "on-pass" : ""} onClick={() => { setApprovalMode("request"); resetSupervisorVerification(); }}>Request signature</button>
+          <button type="button" className={approvalMode === "onsite" ? "on-pass" : ""} onClick={() => { setApprovalMode("onsite"); resetSupervisorVerification(); }}>Sign now</button>
+        </div>
+        {approvalMode === "request" && approverUserId && <div className="alert alert-info">The supervisor will receive a notification after you sign and submit this timecard.</div>}
+        {approvalMode === "onsite" && (
+          <>
+            <Field label="Supervisor PIN" required hint="The supervisor enters their 4-digit signing PIN." error={pinError ?? undefined}>
+              <TextInput value={pin} onChange={(value) => { setPin(value); setPinError(null); resetSupervisorVerification(); }} type="password" inputMode="numeric" maxLength={4} placeholder="0000" invalid={!!pinError} />
             </Field>
-          )}
-          {approvalMode === "onsite" && (
-            <>
-              <Field label="Approver PIN" required hint="The approver enters their 4-digit signing PIN." error={pinError ?? undefined}>
-                <TextInput value={pin} onChange={(value) => { setPin(value); setPinError(null); }} type="password" inputMode="numeric" maxLength={4} placeholder="0000" invalid={!!pinError} />
-              </Field>
-              <SignaturePad signedName={approverName} onNameChange={setApproverName} onChange={setApproverSignature} nameLabel="Approver name" />
-            </>
-          )}
+            <SignaturePad signedName={approverName} onNameChange={(value) => { setApproverName(value); resetSupervisorVerification(); }} onChange={(value) => { setApproverSignature(value); resetSupervisorVerification(); }} nameLabel="Supervisor name" />
+            <button className="btn btn-primary" type="button" disabled={verifyingPin || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2} onClick={verifyOnsiteSupervisor}>
+              {verifyingPin ? "Checking PIN..." : onsiteVerified ? "Supervisor verified" : "Verify supervisor signature"}
+            </button>
+          </>
+        )}
+      </div>
+
+      {supervisorHandled && (
+        <div className="stack">
+          <h3>Employee signature</h3>
+          <SignaturePad signedName={signedName} onNameChange={setSignedName} onChange={setSignature} />
+          <label className="row" style={{ gap: 8, alignItems: "flex-start", fontSize: 13 }}>
+            <input type="checkbox" checked={consent} onChange={(e: { target: { checked: boolean } }) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
+            <span>I confirm this timecard is a complete and accurate record of the hours I worked.</span>
+          </label>
         </div>
       )}
     </Modal>
@@ -415,50 +339,79 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
   const { user } = useAuth();
   const toast = useToast();
   const { data: approvers } = useApiQuery<ApproverSummary[]>("/api/v1/timesheets/approvers");
-  const [lodged, setLodged] = useState(false);
   const [approvalMode, setApprovalMode] = useState<"request" | "onsite" | null>(null);
   const [approverUserId, setApproverUserId] = useState("");
-  const [signedName, setSignedName] = useState(user?.name ?? "");
-  const [signature, setSignature] = useState<SignatureValue | null>(null);
   const [pin, setPin] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
   const [verifyingPin, setVerifyingPin] = useState(false);
+  const [onsiteVerified, setOnsiteVerified] = useState(false);
   const [approverName, setApproverName] = useState("");
   const [approverSignature, setApproverSignature] = useState<SignatureValue | null>(null);
+  const [signedName, setSignedName] = useState(user?.name ?? "");
+  const [signature, setSignature] = useState<SignatureValue | null>(null);
   const [consent, setConsent] = useState(false);
+
+  useEffect(() => {
+    if (!approverUserId && approvers?.[0]) setApproverUserId(approvers[0].id);
+    if (!approvalMode && user?.role === "OWNER") setApprovalMode("onsite");
+    if (!approvalMode && user?.role && MANAGER_ROLES.includes(user.role)) setApprovalMode("request");
+  }, [approvalMode, approverUserId, approvers, user?.role]);
 
   const signMutation = useMutation(
     () =>
       api<Timesheet>(`/api/v1/timesheets/${timesheetId}/submit`, {
         method: "POST",
+        body: { approverUserId, signedName: signedName.trim(), signature: signature!.signature, signatureMethod: signature!.signatureMethod, consent: true },
+      }),
+    ["/api/v1/notifications", "/api/v1/timesheets"],
+  );
+  const onsiteMutation = useMutation(
+    () =>
+      api<Timesheet>(`/api/v1/timesheets/${timesheetId}/submit-onsite-approve`, {
+        method: "POST",
         body: {
+          approverUserId,
+          pin,
+          approverSignedName: approverName.trim(),
+          approverSignature: approverSignature!.signature,
+          approverSignatureMethod: approverSignature!.signatureMethod,
+          approverConsent: true,
           signedName: signedName.trim(),
           signature: signature!.signature,
           signatureMethod: signature!.signatureMethod,
           consent: true,
         },
       }),
-    ["/api/v1/timesheets"],
-  );
-  const requestMutation = useMutation(
-    () => api(`/api/v1/timesheets/${timesheetId}/request-approval`, { method: "POST", body: { approverUserId } }),
     ["/api/v1/notifications", "/api/v1/timesheets"],
   );
-  const onsiteMutation = useMutation(
-    () =>
-      api<Timesheet>(`/api/v1/timesheets/${timesheetId}/onsite-approve`, {
-        method: "POST",
-        body: {
-          approverUserId,
-          pin,
-          signedName: approverName.trim(),
-          signature: approverSignature!.signature,
-          signatureMethod: approverSignature!.signatureMethod,
-          consent: true,
-        },
-      }),
-    ["/api/v1/notifications", "/api/v1/timesheets"],
-  );
+
+  const supervisorHandled = Boolean((approvalMode === "request" && approverUserId) || (approvalMode === "onsite" && onsiteVerified));
+  const ready = Boolean(supervisorHandled && signature && signedName.trim().length >= 2 && consent);
+  const resetSupervisorVerification = () => setOnsiteVerified(false);
+  const verifyOnsiteSupervisor = async () => {
+    if (!approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2) return;
+    setVerifyingPin(true);
+    setPinError(null);
+    resetSupervisorVerification();
+    const error = await verifySigningPin(approverUserId, pin);
+    setVerifyingPin(false);
+    if (error) {
+      setPinError(error);
+      return;
+    }
+    setOnsiteVerified(true);
+    toast.push("Supervisor signature verified");
+  };
+
+  const submit = () => {
+    const mutation = approvalMode === "onsite" ? onsiteMutation : signMutation;
+    mutation.run({
+      onSuccess: () => {
+        toast.push(approvalMode === "onsite" ? "Timecard signed and approved" : "Timecard lodged and signature requested");
+        onClose();
+      },
+    });
+  };
 
   return (
     <Modal
@@ -466,115 +419,51 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
       onClose={onClose}
       footer={
         <>
-          <button className="btn btn-ghost" onClick={onClose}>
-            {lodged ? "Done" : "Cancel"}
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={verifyingPin || signMutation.running || onsiteMutation.running || !ready} onClick={submit}>
+            {signMutation.running || onsiteMutation.running ? "Submitting..." : approvalMode === "onsite" ? "Sign & approve timecard" : "Sign & request supervisor"}
           </button>
-          {!lodged && (
-            <button
-              className="btn btn-accent"
-              disabled={signMutation.running || !signature || signedName.trim().length < 2 || !consent}
-              onClick={() =>
-                signMutation.run({
-                  onSuccess: () => {
-                    setLodged(true);
-                    toast.push("Timecard lodged");
-                  },
-                })
-              }
-            >
-              {signMutation.running ? "Lodging..." : "Sign & lodge"}
-            </button>
-          )}
-          {lodged && approvalMode === "request" && (
-            <button
-              className="btn btn-primary"
-              disabled={requestMutation.running || !approverUserId}
-              onClick={() =>
-                requestMutation.run({
-                  onSuccess: () => {
-                    toast.push("Signature requested");
-                    onClose();
-                  },
-                })
-              }
-            >
-              {requestMutation.running ? "Requesting..." : "Request signature"}
-            </button>
-          )}
-          {lodged && approvalMode === "onsite" && (
-            <button
-              className="btn btn-primary"
-              disabled={verifyingPin || onsiteMutation.running || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2}
-              onClick={async () => {
-                setVerifyingPin(true);
-                setPinError(null);
-                const error = await verifySigningPin(approverUserId, pin);
-                setVerifyingPin(false);
-                if (error) {
-                  setPinError(error);
-                  return;
-                }
-                onsiteMutation.run({
-                  onSuccess: () => {
-                    toast.push("Timecard approved on site");
-                    onClose();
-                  },
-                });
-              }}
-            >
-              {verifyingPin ? "Checking PIN..." : onsiteMutation.running ? "Signing..." : "Add signature & approve"}
-            </button>
-          )}
         </>
       }
     >
-      <ErrorAlert error={signMutation.error || requestMutation.error || onsiteMutation.error} onDismiss={() => { signMutation.reset(); requestMutation.reset(); onsiteMutation.reset(); }} />
-      {!lodged ? (
-        <>
+      <ErrorAlert error={signMutation.error || onsiteMutation.error} onDismiss={() => { signMutation.reset(); onsiteMutation.reset(); }} />
+      <div className="stack">
+        <h3>Supervisor signature</h3>
+        <Field label="Supervisor" required hint="Pick who will approve this timecard before you sign it.">
+          <Select
+            value={approverUserId}
+            onChange={(value) => { setApproverUserId(value); setPinError(null); resetSupervisorVerification(); }}
+            allowEmpty
+            emptyLabel="— Select supervisor —"
+            options={(approvers ?? []).map((approver) => ({ value: approver.id, label: `${approver.name} (${titleCase(approver.role)})` }))}
+          />
+        </Field>
+        <div className="seg" style={{ width: "fit-content" }}>
+          <button type="button" className={approvalMode === "request" ? "on-pass" : ""} onClick={() => { setApprovalMode("request"); resetSupervisorVerification(); }}>Request signature</button>
+          <button type="button" className={approvalMode === "onsite" ? "on-pass" : ""} onClick={() => { setApprovalMode("onsite"); resetSupervisorVerification(); }}>Sign now</button>
+        </div>
+        {approvalMode === "request" && approverUserId && <div className="alert alert-info">The supervisor will receive a notification after you sign and submit this timecard.</div>}
+        {approvalMode === "onsite" && (
+          <>
+            <Field label="Supervisor PIN" required hint="The supervisor enters their 4-digit signing PIN." error={pinError ?? undefined}>
+              <TextInput value={pin} onChange={(value) => { setPin(value); setPinError(null); resetSupervisorVerification(); }} type="password" inputMode="numeric" maxLength={4} placeholder="0000" invalid={!!pinError} />
+            </Field>
+            <SignaturePad signedName={approverName} onNameChange={(value) => { setApproverName(value); resetSupervisorVerification(); }} onChange={(value) => { setApproverSignature(value); resetSupervisorVerification(); }} nameLabel="Supervisor name" />
+            <button className="btn btn-primary" type="button" disabled={verifyingPin || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2} onClick={verifyOnsiteSupervisor}>
+              {verifyingPin ? "Checking PIN..." : onsiteVerified ? "Supervisor verified" : "Verify supervisor signature"}
+            </button>
+          </>
+        )}
+      </div>
+
+      {supervisorHandled && (
+        <div className="stack">
+          <h3>Employee signature</h3>
           <SignaturePad signedName={signedName} onNameChange={setSignedName} onChange={setSignature} />
           <label className="row" style={{ gap: 8, alignItems: "flex-start", fontSize: 13 }}>
             <input type="checkbox" checked={consent} onChange={(e: { target: { checked: boolean } }) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
             <span>I confirm this timecard is a complete and accurate record of the hours I worked.</span>
           </label>
-        </>
-      ) : (
-        <div className="stack">
-          <div className="alert alert-info">
-            Timecard lodged. Pick how the manager or supervisor will countersign it.
-          </div>
-          <div className="seg" style={{ width: "fit-content" }}>
-            <button type="button" className={approvalMode === "onsite" ? "on-pass" : ""} onClick={() => setApprovalMode("onsite")}>
-              Add signature + PIN
-            </button>
-            <button type="button" className={approvalMode === "request" ? "on-pass" : ""} onClick={() => setApprovalMode("request")}>
-              Request signature
-            </button>
-          </div>
-          {approvalMode && (
-            <Field label="Approver" required hint="Owner, admin, PM, supervisor or foreman.">
-              <Select
-                value={approverUserId}
-                onChange={(value) => {
-                  setApproverUserId(value);
-                  setPinError(null);
-                }}
-                allowEmpty
-                emptyLabel="— Select approver —"
-                options={(approvers ?? []).map((approver) => ({
-                  value: approver.id,
-                  label: `${approver.name} (${titleCase(approver.role)})`,
-                }))}
-              />
-            </Field>
-          )}
-          {approvalMode === "onsite" && (
-            <>
-              <Field label="Approver PIN" required hint="The approver enters their 4-digit signing PIN." error={pinError ?? undefined}>
-                <TextInput value={pin} onChange={(value) => { setPin(value); setPinError(null); }} type="password" inputMode="numeric" maxLength={4} placeholder="0000" invalid={!!pinError} />
-              </Field>
-              <SignaturePad signedName={approverName} onNameChange={setApproverName} onChange={setApproverSignature} nameLabel="Approver name" />
-            </>
-          )}
         </div>
       )}
     </Modal>
