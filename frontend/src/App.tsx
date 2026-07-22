@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { AuthProvider, canAccessSection, useAuth } from "./lib/auth.tsx";
 import { RouterProvider, matchPath, usePath } from "./lib/router.tsx";
 import { ToastProvider } from "./components/ui.tsx";
@@ -111,11 +112,33 @@ function Routes() {
   }
 }
 
+const BUSY_BUTTON_TEXT = /\b(adding|analysing|building|checking pin|closing|creating|publishing|re-analysing|recording|rejecting|saving|signing|submitting|updating|uploading)\b|…|\.{3}/i;
+
+function BusyButtonObserver() {
+  useEffect(() => {
+    const sync = () => {
+      document.querySelectorAll<HTMLElement>(".btn").forEach((button) => {
+        const disabled = button.matches("button:disabled") || button.classList.contains("disabled") || button.getAttribute("aria-disabled") === "true";
+        const busy = disabled && BUSY_BUTTON_TEXT.test(button.textContent ?? "");
+        button.classList.toggle("btn-busy", busy);
+        if (busy) button.setAttribute("aria-busy", "true");
+        else if (button.getAttribute("aria-busy") === "true") button.removeAttribute("aria-busy");
+      });
+    };
+    sync();
+    const observer = new MutationObserver(sync);
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ["class", "disabled", "aria-disabled"] });
+    return () => observer.disconnect();
+  }, []);
+  return null;
+}
+
 export default function App() {
   return (
     <RouterProvider>
       <ToastProvider>
         <AuthProvider>
+          <BusyButtonObserver />
           <Routes />
         </AuthProvider>
       </ToastProvider>
