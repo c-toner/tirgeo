@@ -181,9 +181,38 @@ enum AccountSection {
   TIMESHEETS
   PAYROLL
   COMMERCIAL
+  COST_TRACKING
   WORKER_DIRECTORY
   USER_ADMIN
   SETTINGS
+}
+
+enum CostEntryType {
+  LABOUR
+  PLANT
+  MATERIALS
+  SUBCONTRACTOR
+  HIRE
+  DISPOSAL
+  TRAFFIC_MANAGEMENT
+  SURVEYING
+  OVERHEAD
+  OTHER
+}
+
+enum CostEntryStatus {
+  COMMITTED
+  ACCRUED
+  INVOICED
+  APPROVED
+  PAID
+  DISPUTED
+}
+
+enum ForecastConfidence {
+  LOW
+  MEDIUM
+  HIGH
 }
 
 model Organisation {
@@ -425,6 +454,9 @@ model Project {
   incidents              Incident[]
   progressClaims         ProgressClaim[]
   variations             Variation[]
+  costPlan               ProjectCostPlan?
+  costEntries            CostEntry[]
+  costForecasts          CostForecast[]
   documents              Document[]
   inductions             Induction[]
   hazards                HazardRegisterItem[]
@@ -500,8 +532,66 @@ model CostCode {
   project           Project            @relation(fields: [projectId], references: [id])
   entries           TimeEntry[]
   productionActuals ProductionActual[]
+  costEntries       CostEntry[]
+  costForecasts     CostForecast[]
 
   @@unique([projectId, code])
+}
+
+model ProjectCostPlan {
+  id                  String   @id @default(uuid())
+  projectId           String   @unique
+  contractBudget      Decimal? @db.Decimal(16, 2)
+  contingencyAmount   Decimal  @default(0) @db.Decimal(16, 2)
+  targetMarginPercent Decimal? @db.Decimal(6, 2)
+  notes               String?
+  updatedAt           DateTime @updatedAt
+  project             Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model CostEntry {
+  id            String          @id @default(uuid())
+  projectId     String
+  costCodeId    String?
+  type          CostEntryType
+  status        CostEntryStatus @default(ACCRUED)
+  supplier      String?
+  description   String
+  incurredAt    DateTime
+  invoiceNumber String?
+  quantity      Decimal?        @db.Decimal(14, 3)
+  unit          String?
+  unitRate      Decimal?        @db.Decimal(14, 2)
+  amount        Decimal         @db.Decimal(16, 2)
+  gstAmount     Decimal         @default(0) @db.Decimal(16, 2)
+  committed     Boolean         @default(false)
+  source        String          @default("MANUAL")
+  createdById   String
+  createdAt     DateTime        @default(now())
+  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCode      CostCode?       @relation(fields: [costCodeId], references: [id])
+
+  @@index([projectId, incurredAt])
+  @@index([projectId, type])
+  @@index([costCodeId])
+}
+
+model CostForecast {
+  id          String             @id @default(uuid())
+  projectId   String
+  costCodeId  String?
+  type        CostEntryType
+  description String
+  amount      Decimal            @db.Decimal(16, 2)
+  confidence  ForecastConfidence @default(MEDIUM)
+  createdById String
+  createdAt   DateTime           @default(now())
+  resolvedAt  DateTime?
+  project     Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCode    CostCode?          @relation(fields: [costCodeId], references: [id])
+
+  @@index([projectId, resolvedAt])
+  @@index([costCodeId])
 }
 
 model Timesheet {

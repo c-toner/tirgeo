@@ -212,6 +212,7 @@ export function ObservationsPage() {
   });
   const [reporting, setReporting] = useState(false);
   const [reportingIncident, setReportingIncident] = useState(false);
+  const [viewingObservation, setViewingObservation] = useState<SafetyObservation | null>(null);
   const recentIncidents = listRecents("incidents");
 
   return (
@@ -242,9 +243,6 @@ export function ObservationsPage() {
           <div className="filter-row">
             <ProjectSelect value={projectId} onChange={setProjectId} allowEmpty />
             <Select value={type} onChange={setType} allowEmpty emptyLabel="Any type" options={OBSERVATION_TYPES} />
-            <button className="btn btn-primary btn-sm" style={{ marginLeft: "auto" }} onClick={() => setReporting(true)}>
-              <Icon name="plus" size={13} /> Report
-            </button>
           </div>
           <ErrorAlert error={error} />
           {loading && !data && <Loading />}
@@ -276,7 +274,7 @@ export function ObservationsPage() {
                 </thead>
                 <tbody>
                   {data.map((observation) => (
-                    <ObservationRow key={observation.id} observation={observation} />
+                    <ObservationRow key={observation.id} observation={observation} onOpen={() => setViewingObservation(observation)} />
                   ))}
                 </tbody>
               </table>
@@ -335,14 +333,64 @@ export function ObservationsPage() {
 
       {reporting && <ObservationModal onClose={() => setReporting(false)} />}
       {reportingIncident && <IncidentModal onClose={() => setReportingIncident(false)} />}
+      {viewingObservation && <ObservationDetailModal observation={viewingObservation} onClose={() => setViewingObservation(null)} />}
     </Layout>
   );
 }
 
-function ObservationRow({ observation }: { observation: SafetyObservation }) {
+function ObservationDetailModal({ observation, onClose }: { observation: SafetyObservation; onClose: () => void }) {
   const projectName = useProjectName(observation.projectId);
   return (
-    <tr>
+    <Modal title="Observation details" onClose={onClose} footer={<button className="btn btn-ghost" onClick={onClose}>Close</button>}>
+      <div className="stack">
+        <div className="summary-grid">
+          <div className="summary-item">
+            <span>Project</span>
+            <b>{projectName}</b>
+          </div>
+          <div className="summary-item">
+            <span>Type</span>
+            <b>{titleCase(observation.type)}</b>
+          </div>
+          <div className="summary-item">
+            <span>Risk</span>
+            <b><RiskBadge level={observation.riskLevel ?? null} /></b>
+          </div>
+          <div className="summary-item">
+            <span>Observed</span>
+            <b>{formatDateTime(observation.observedAt)}</b>
+          </div>
+        </div>
+        <section className="summary-section">
+          <h3>{observation.title}</h3>
+          <p className="muted">{observation.description || "No description recorded."}</p>
+        </section>
+        {observation.immediateAction && (
+          <section className="summary-section">
+            <h3>Immediate action</h3>
+            <p className="muted">{observation.immediateAction}</p>
+          </section>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function ObservationRow({ observation, onOpen }: { observation: SafetyObservation; onOpen: () => void }) {
+  const projectName = useProjectName(observation.projectId);
+  return (
+    <tr
+      className="clickable-row"
+      tabIndex={0}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      aria-label={`Open observation details for ${observation.title}`}
+    >
       <td>
         <b>{observation.title}</b>
         <div className="tiny">{observation.description}</div>

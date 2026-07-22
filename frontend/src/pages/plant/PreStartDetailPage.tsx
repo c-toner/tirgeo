@@ -1,4 +1,5 @@
 import { Layout } from "../../components/Layout.tsx";
+import { FileImageLink } from "../../components/FileImage.tsx";
 import { EmptyState, ErrorAlert, Loading, StatusBadge } from "../../components/ui.tsx";
 import { formatDateTime } from "../../lib/format.ts";
 import { Link } from "../../lib/router.tsx";
@@ -119,10 +120,14 @@ export function PreStartDetailPage({ preStartId }: { preStartId: string }) {
             ) : (
               <div className="prestart-photo-grid">
                 {data.photos.map((photo) => (
-                  <a key={photo.id} href={photo.downloadUrl ?? photo.url} target="_blank" rel="noreferrer" className="prestart-photo">
-                    <img src={photo.downloadUrl ?? photo.url} alt={photo.originalName} />
-                    <span>{photo.originalName}</span>
-                  </a>
+                  <FileImageLink key={photo.id} file={photo} className="prestart-photo">
+                    {(url) => (
+                      <>
+                        <img src={url} alt={photo.originalName} />
+                        <span>{photo.originalName}</span>
+                      </>
+                    )}
+                  </FileImageLink>
                 ))}
               </div>
             )}

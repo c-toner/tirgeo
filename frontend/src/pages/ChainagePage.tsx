@@ -1,18 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { FileImage, FileImageLink } from "../components/FileImage.tsx";
 import { Layout } from "../components/Layout.tsx";
 import { ProjectSelect } from "../components/ProjectSelect.tsx";
 import { EmptyState, ErrorAlert, Field, Icon, Loading, Modal, Select, StatusBadge, TextArea, TextInput, useToast } from "../components/ui.tsx";
 import { api } from "../lib/api.ts";
 import { formatDateTime, titleCase } from "../lib/format.ts";
+import { prepareImageForUpload } from "../lib/images.ts";
 import type { ChainageAlignment, ChainageObservation, FileAsset } from "../lib/types.ts";
 import { useApiQuery, useMutation } from "../lib/useApi.ts";
 
 const SIDES = ["LEFT", "CENTRE", "RIGHT", "BOTH", "UNKNOWN"];
 const CATEGORIES = ["ISSUE", "DEFECT", "SCOPE", "QUOTE", "PHOTO_RECORD", "ACCESS", "UTILITY", "DRAINAGE"];
 const TILE_SIZE = 256;
-const MAP_W = 720;
-const MAP_H = 440;
 const DEFAULT_CENTER = { latitude: -32.9283, longitude: 151.7817 };
+const MIN_MAP_ZOOM = 8;
+const MAX_MAP_ZOOM = 18;
 
 function toNumber(value?: string | number | null): number {
   if (value === null || value === undefined || value === "") return 0;
@@ -163,16 +165,39 @@ function WorkMap({
   const [center, setCenter] = useState(initialCenter);
   const [zoom, setZoom] = useState(15);
   const [failedTiles, setFailedTiles] = useState<Record<string, true>>({});
+  const mapRef = useRef<HTMLDivElement | null>(null);
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const gesture = useRef<{
+    moved: boolean;
+    startCenterWorld: { x: number; y: number };
+    startDistance?: number;
+    startZoom: number;
+    anchorLatLng?: { latitude: number; longitude: number };
+    anchorScreen?: { x: number; y: number };
+  } | null>(null);
+  const [mapSize, setMapSize] = useState({ width: 720, height: 440 });
 
   useEffect(() => setCenter(initialCenter), [initialCenter]);
   useEffect(() => setFailedTiles({}), [center.latitude, center.longitude, zoom]);
+  useEffect(() => {
+    const element = mapRef.current;
+    if (!element) return;
+    const update = () => {
+      const rect = element.getBoundingClientRect();
+      setMapSize({ width: Math.max(280, Math.round(rect.width)), height: Math.max(320, Math.round(rect.height)) });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const centerWorld = latLngToWorld(center.latitude, center.longitude, zoom);
-  const topLeft = { x: centerWorld.x - MAP_W / 2, y: centerWorld.y - MAP_H / 2 };
+  const topLeft = { x: centerWorld.x - mapSize.width / 2, y: centerWorld.y - mapSize.height / 2 };
   const tileMinX = Math.floor(topLeft.x / TILE_SIZE);
-  const tileMaxX = Math.floor((topLeft.x + MAP_W) / TILE_SIZE);
+  const tileMaxX = Math.floor((topLeft.x + mapSize.width) / TILE_SIZE);
   const tileMinY = Math.floor(topLeft.y / TILE_SIZE);
-  const tileMaxY = Math.floor((topLeft.y + MAP_H) / TILE_SIZE);
+  const tileMaxY = Math.floor((topLeft.y + mapSize.height) / TILE_SIZE);
   const tileCount = 2 ** zoom;
   const tiles = [];
   for (let x = tileMinX; x <= tileMaxX; x += 1) {
@@ -212,22 +237,101 @@ function WorkMap({
   }, [markerItems, zoom]);
   const draftScreen = draft ? toScreen(draft.latitude, draft.longitude) : null;
 
+  const screenPoint = (clientX: number, clientY: number) => {
+    const rect = mapRef.current?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  };
+
+  const pointAtScreen = (screen: { x: number; y: number }) => worldToLatLng(topLeft.x + screen.x, topLeft.y + screen.y, zoom);
+
+  const zoomAt = (screen: { x: number; y: number }, nextZoom: number, anchor = pointAtScreen(screen)) => {
+    const clamped = Math.max(MIN_MAP_ZOOM, Math.min(MAX_MAP_ZOOM, Math.round(nextZoom)));
+    const nextWorld = latLngToWorld(anchor.latitude, anchor.longitude, clamped);
+    const nextCenterWorld = {
+      x: nextWorld.x - (screen.x - mapSize.width / 2),
+      y: nextWorld.y - (screen.y - mapSize.height / 2),
+    };
+    setZoom(clamped);
+    setCenter(worldToLatLng(nextCenterWorld.x, nextCenterWorld.y, clamped));
+  };
+
   const pan = (dx: number, dy: number) => {
     const next = worldToLatLng(centerWorld.x + dx, centerWorld.y + dy, zoom);
     setCenter(next);
   };
 
+  const pickAt = (clientX: number, clientY: number) => {
+    const screen = screenPoint(clientX, clientY);
+    const point = pointAtScreen(screen);
+    const nearest = nearestChainage(alignment, point);
+    onPick({ ...point, chainageM: nearest?.chainageM, snapDistanceM: nearest?.distanceM });
+  };
+
   return (
     <div className="work-map-shell">
       <div
+        ref={mapRef}
         className="work-map"
-        onClick={(event) => {
-          const rect = event.currentTarget.getBoundingClientRect();
-          const x = topLeft.x + ((event.clientX - rect.left) / rect.width) * MAP_W;
-          const y = topLeft.y + ((event.clientY - rect.top) / rect.height) * MAP_H;
-          const point = worldToLatLng(x, y, zoom);
-          const nearest = nearestChainage(alignment, point);
-          onPick({ ...point, chainageM: nearest?.chainageM, snapDistanceM: nearest?.distanceM });
+        onWheel={(event) => {
+          event.preventDefault();
+          const screen = screenPoint(event.clientX, event.clientY);
+          zoomAt(screen, zoom + (event.deltaY < 0 ? 1 : -1));
+        }}
+        onPointerDown={(event) => {
+          event.currentTarget.setPointerCapture(event.pointerId);
+          pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          const values = [...pointers.current.values()];
+          if (values.length === 1) {
+            gesture.current = { moved: false, startCenterWorld: centerWorld, startZoom: zoom };
+          }
+          if (values.length === 2) {
+            const a = values[0];
+            const b = values[1];
+            const midpoint = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            const screen = screenPoint(midpoint.x, midpoint.y);
+            gesture.current = {
+              moved: false,
+              startCenterWorld: centerWorld,
+              startDistance: Math.hypot(a.x - b.x, a.y - b.y),
+              startZoom: zoom,
+              anchorLatLng: pointAtScreen(screen),
+              anchorScreen: screen,
+            };
+          }
+        }}
+        onPointerMove={(event) => {
+          const previous = pointers.current.get(event.pointerId);
+          if (!previous || !gesture.current) return;
+          pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+          const values = [...pointers.current.values()];
+          if (values.length === 1) {
+            const dx = event.clientX - previous.x;
+            const dy = event.clientY - previous.y;
+            if (Math.hypot(dx, dy) > 2) gesture.current.moved = true;
+            setCenter((current) => {
+              const currentWorld = latLngToWorld(current.latitude, current.longitude, zoom);
+              return worldToLatLng(currentWorld.x - dx, currentWorld.y - dy, zoom);
+            });
+          }
+          if (values.length >= 2 && gesture.current.startDistance && gesture.current.anchorLatLng && gesture.current.anchorScreen) {
+            const a = values[0];
+            const b = values[1];
+            const distance = Math.hypot(a.x - b.x, a.y - b.y);
+            const ratio = distance / Math.max(1, gesture.current.startDistance);
+            if (Math.abs(ratio - 1) > 0.02) gesture.current.moved = true;
+            zoomAt(gesture.current.anchorScreen, gesture.current.startZoom + Math.log2(ratio), gesture.current.anchorLatLng);
+          }
+        }}
+        onPointerUp={(event) => {
+          const wasTap = pointers.current.size === 1 && !gesture.current?.moved;
+          pointers.current.delete(event.pointerId);
+          if (wasTap) pickAt(event.clientX, event.clientY);
+          if (pointers.current.size === 0) gesture.current = null;
+        }}
+        onPointerCancel={(event) => {
+          pointers.current.delete(event.pointerId);
+          if (pointers.current.size === 0) gesture.current = null;
         }}
       >
         {tiles.map((tile) => {
@@ -251,7 +355,7 @@ function WorkMap({
           </div>
         )}
         {linePoints.length > 1 && (
-          <svg className="work-map-overlay" viewBox={`0 0 ${MAP_W} ${MAP_H}`}>
+          <svg className="work-map-overlay" viewBox={`0 0 ${mapSize.width} ${mapSize.height}`}>
             <polyline points={linePoints.map((point) => `${point.left},${point.top}`).join(" ")} className="work-map-alignment" />
           </svg>
         )}
@@ -353,10 +457,14 @@ function ChainageObservationDetailModal({ observationId, onClose }: { observatio
             item.photos?.length ? (
               <div className="prestart-photo-grid">
                 {item.photos.map((photo) => (
-                  <a key={photo.id} href={photo.downloadUrl ?? photo.url} target="_blank" rel="noreferrer" className="prestart-photo">
-                    <img src={photo.downloadUrl ?? photo.url} alt={photo.originalName} />
-                    <span>{photo.originalName}</span>
-                  </a>
+                  <FileImageLink key={photo.id} file={photo} className="prestart-photo">
+                    {(url) => (
+                      <>
+                        <img src={url} alt={photo.originalName} />
+                        <span>{photo.originalName}</span>
+                      </>
+                    )}
+                  </FileImageLink>
                 ))}
               </div>
             ) : (
@@ -460,8 +568,9 @@ export function ChainagePage() {
     try {
       const uploaded: FileAsset[] = [];
       for (const file of Array.from(files)) {
+        const prepared = await prepareImageForUpload(file);
         const formData = new FormData();
-        formData.set("file", file);
+        formData.set("file", prepared);
         formData.set("entityType", "ChainageObservation");
         formData.set("metadata", JSON.stringify({ projectId, alignmentId: selectedAlignment?.id, chainage: observationForm.chainage, draft: true }));
         uploaded.push(await api<FileAsset>("/api/v1/files", { method: "POST", formData }));
@@ -653,7 +762,7 @@ export function ChainagePage() {
           <div className="photo-grid">
             {photos.map((photo) => (
               <div className="photo-chip" key={photo.id}>
-                <img src={photo.downloadUrl ?? photo.url} alt={photo.originalName} />
+                <FileImage file={photo} />
                 <button className="btn-icon" type="button" aria-label="Remove photo" onClick={() => setPhotos((current) => current.filter((item) => item.id !== photo.id))}>
                   <Icon name="x" size={14} />
                 </button>

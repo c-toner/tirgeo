@@ -52,6 +52,7 @@ describe("account section policy", () => {
     expect(sections).toContain(AccountSection.PLANT_MANAGEMENT);
     expect(sections).toContain(AccountSection.DAILY_REPORT);
     expect(sections).toContain(AccountSection.COMMERCIAL);
+    expect(sections).toContain(AccountSection.COST_TRACKING);
     expect(sections).not.toContain(AccountSection.PAYROLL);
     expect(sections).not.toContain(AccountSection.USER_ADMIN);
     expect(canViewPayrollDetails(Role.OPERATIONS_MANAGER)).toBe(false);

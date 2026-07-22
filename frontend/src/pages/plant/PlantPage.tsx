@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Layout } from "../../components/Layout.tsx";
+import { FileImage } from "../../components/FileImage.tsx";
 import { ProjectSelect } from "../../components/ProjectSelect.tsx";
 import {
   EmptyState,
@@ -20,6 +21,7 @@ import { WorkerSelect } from "../../components/WorkerSelect.tsx";
 import { api } from "../../lib/api.ts";
 import { PLANT_CLEARERS, PROJECT_LEADERS, TEMPLATE_ADMINS, useAuth } from "../../lib/auth.tsx";
 import { formatDate, formatDateTime, titleCase } from "../../lib/format.ts";
+import { prepareImageForUpload } from "../../lib/images.ts";
 import { Link } from "../../lib/router.tsx";
 import type { FileAsset, InspectionResult, PaginatedResult, Plant, PlantPreStartSummary, PreStartDefect, PreStartTemplate } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
@@ -183,9 +185,11 @@ function PreStartModal({ plant: initialPlant, onClose }: { plant?: Plant | null;
     try {
       const uploaded: FileAsset[] = [];
       for (const file of Array.from(files)) {
+        const prepared = await prepareImageForUpload(file);
         const formData = new FormData();
-        formData.set("file", file);
+        formData.set("file", prepared);
         formData.set("entityType", "PlantPreStart");
+        if (projectId) formData.set("projectId", projectId);
         formData.set("metadata", JSON.stringify({ plantId: plant?.id, assetNumber: plant?.assetNumber, draft: true }));
         const asset = await api<FileAsset>("/api/v1/files", { method: "POST", formData });
         uploaded.push(asset);
@@ -356,7 +360,7 @@ function PreStartModal({ plant: initialPlant, onClose }: { plant?: Plant | null;
           <div className="photo-grid">
             {photos.map(photo => (
               <div className="photo-chip" key={photo.id}>
-                <img src={photo.downloadUrl ?? photo.url} alt={photo.originalName} />
+                <FileImage file={photo} />
                 <button className="btn-icon" type="button" aria-label="Remove photo" onClick={() => setPhotos(current => current.filter(item => item.id !== photo.id))}>
                   <Icon name="x" size={14} />
                 </button>
@@ -526,12 +530,6 @@ function WorkerPreStartHistory({
 
   return (
     <section className="stack">
-      <div className="worker-prestart-head">
-        <button className="btn btn-accent" onClick={onNewPreStart}>
-          <Icon name="plus" size={15} /> New pre-start
-        </button>
-      </div>
-
       <ErrorAlert error={error} />
       {loading && !data && <Loading />}
       {!loading && rows.length === 0 && (

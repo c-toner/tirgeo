@@ -60,6 +60,7 @@ const NAV: NavGroup[] = [
     title: "Commercial",
     items: [
       { to: "/commercial", label: "Tenders & claims", icon: "briefcase", section: "COMMERCIAL" },
+      { to: "/commercial/cost-tracking", label: "Cost tracking", icon: "dollars", section: "COST_TRACKING" },
     ],
   },
 ];
@@ -93,6 +94,7 @@ function initials(name: string): string {
 function NotificationsDrawer({ onClose }: { onClose: () => void }) {
   const { data, loading } = useApiQuery<AppNotification[]>("/api/v1/notifications");
   const toast = useToast();
+  const unread = data?.filter((notification) => !notification.readAt).length ?? 0;
 
   const markRead = async (notification: AppNotification) => {
     if (notification.readAt) return;
@@ -109,10 +111,30 @@ function NotificationsDrawer({ onClose }: { onClose: () => void }) {
       <div className="drawer-backdrop" onClick={onClose} />
       <aside className="drawer" aria-label="Notifications">
         <div className="card-header">
-          <h2>Notifications</h2>
-          <button className="btn-icon" onClick={onClose} aria-label="Close notifications">
-            <Icon name="x" />
-          </button>
+          <div>
+            <h2>Notifications</h2>
+            {unread > 0 && <span className="hint">{unread} unread</span>}
+          </div>
+          <div className="row" style={{ gap: 6 }}>
+            {unread > 0 && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={async () => {
+                  try {
+                    await api("/api/v1/notifications/read-all", { method: "POST" });
+                    invalidate("/api/v1/notifications");
+                  } catch {
+                    toast.push("Could not mark all as read", "error");
+                  }
+                }}
+              >
+                Mark all read
+              </button>
+            )}
+            <button className="btn-icon" onClick={onClose} aria-label="Close notifications">
+              <Icon name="x" />
+            </button>
+          </div>
         </div>
         <div style={{ overflowY: "auto", flex: 1 }}>
           {loading && <div className="spinner" />}
@@ -219,17 +241,6 @@ export function Layout({ title, children, actions }: { title: string; children: 
           <Icon name="settings" size={16} />
           Settings
         </Link>
-        <button
-          className="nav-item"
-          style={{ width: "100%", background: "none", border: "none", cursor: "pointer", font: "inherit", textAlign: "left" }}
-          onClick={() => setNotifOpen(true)}
-        >
-          <span style={{ position: "relative", display: "inline-flex" }}>
-            <Icon name="bell" size={16} />
-            {unread > 0 && <span className="unread-dot" style={{ top: -3, right: -3 }} />}
-          </span>
-          Notifications{unread > 0 ? ` (${unread})` : ""}
-        </button>
       </nav>
       <div className="sidebar-footer">
         <span className="avatar">{user ? initials(user.name) : "?"}</span>
@@ -275,7 +286,16 @@ export function Layout({ title, children, actions }: { title: string; children: 
       <main className="main">
         <header className="topbar">
           <h1>{title}</h1>
-          {actions}
+          <div className="topbar-actions">
+            {actions}
+            <button className="notification-button" onClick={() => setNotifOpen(true)} aria-label={`Notifications (${unread})`}>
+              <span style={{ position: "relative", display: "inline-flex" }}>
+                <Icon name="bell" size={17} />
+                {unread > 0 && <span className="unread-dot" style={{ top: -4, right: -4 }} />}
+              </span>
+              Notifications ({unread})
+            </button>
+          </div>
         </header>
         <div className="construction-banner" role="status">
           <Icon name="alert" size={16} />
@@ -285,7 +305,7 @@ export function Layout({ title, children, actions }: { title: string; children: 
         </div>
         <div className="content">
           {/* Actions repeated for mobile since the topbar is hidden there */}
-          {actions && <div className="row mobile-actions-slot">{null}</div>}
+          {actions && <div className="mobile-actions-slot">{actions}</div>}
           {children}
         </div>
       </main>

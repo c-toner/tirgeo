@@ -19,6 +19,7 @@ import { DailyReportPage } from "./pages/field/DailyReportPage.tsx";
 import { TimesheetsPage } from "./pages/timesheets/TimesheetsPage.tsx";
 import { PayrollPage } from "./pages/payroll/PayrollPage.tsx";
 import { CommercialPage } from "./pages/commercial/CommercialPage.tsx";
+import { CostTrackingPage } from "./pages/commercial/CostTrackingPage.tsx";
 import { TenderDetailPage } from "./pages/commercial/TenderDetailPage.tsx";
 import { SettingsPage } from "./pages/SettingsPage.tsx";
 import { ChainagePage } from "./pages/ChainagePage.tsx";
@@ -40,6 +41,7 @@ const ROUTE_SECTIONS: Array<[string, AccountSection]> = [
   ["/chainage", "CHAINAGE"],
   ["/timesheets", "TIMESHEETS"],
   ["/payroll", "PAYROLL"],
+  ["/commercial/cost-tracking", "COST_TRACKING"],
   ["/commercial", "COMMERCIAL"],
   ["/settings", "SETTINGS"],
 ];
@@ -100,6 +102,8 @@ function Routes() {
       return <PayrollPage />;
     case "/commercial":
       return <CommercialPage />;
+    case "/commercial/cost-tracking":
+      return <CostTrackingPage />;
     case "/settings":
       return <SettingsPage />;
     default:

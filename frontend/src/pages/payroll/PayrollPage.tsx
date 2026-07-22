@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Layout } from "../../components/Layout.tsx";
 import {
   ErrorAlert,
@@ -13,12 +13,31 @@ import {
 } from "../../components/ui.tsx";
 import { WorkerSelect } from "../../components/WorkerSelect.tsx";
 import { api } from "../../lib/api.ts";
-import { formatDate, isoDateOnly } from "../../lib/format.ts";
+import { formatDate, isoDateOnly, minutesToHours } from "../../lib/format.ts";
 import { listRecents, rememberRecent, updateRecent } from "../../lib/recents.ts";
-import type { AccountingProvider, PayrollConnection, PayrollExport } from "../../lib/types.ts";
-import { useMutation } from "../../lib/useApi.ts";
+import type { AccountingProvider, PayrollConnection, PayrollExport, Timesheet } from "../../lib/types.ts";
+import { useApiQuery, useMutation } from "../../lib/useApi.ts";
 
 const PROVIDERS: AccountingProvider[] = ["XERO", "MYOB"];
+
+function inputDate(value = new Date()): string {
+  const offset = value.getTimezoneOffset() * 60000;
+  return new Date(value.getTime() - offset).toISOString().slice(0, 10);
+}
+
+function lastMonthDate(): string {
+  const date = new Date();
+  date.setDate(date.getDate() - 30);
+  return inputDate(date);
+}
+
+function timecardTotal(timesheet: Timesheet): number {
+  return timesheet.entries.reduce((sum, entry) => sum + entry.ordinaryMinutes + entry.overtimeMinutes, 0);
+}
+
+function timecardWorker(timesheet: Timesheet): string {
+  return timesheet.worker ? `${timesheet.worker.firstName} ${timesheet.worker.lastName}` : "Worker";
+}
 
 function ConnectionCard({ provider }: { provider: AccountingProvider }) {
   const toast = useToast();
@@ -159,13 +178,20 @@ function ConnectionCard({ provider }: { provider: AccountingProvider }) {
 function CreateExportModal({ onClose }: { onClose: () => void }) {
   const toast = useToast();
   const [provider, setProvider] = useState<string>("XERO");
-  const [periodStart, setPeriodStart] = useState("");
-  const [periodEnd, setPeriodEnd] = useState("");
-  const [timesheetIds, setTimesheetIds] = useState("");
-  const ids = timesheetIds
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean);
+  const [periodStart, setPeriodStart] = useState(lastMonthDate);
+  const [periodEnd, setPeriodEnd] = useState(() => inputDate());
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const available = useApiQuery<Timesheet[]>("/api/v1/payroll/approved-timesheets", periodStart && periodEnd ? { periodStart: isoDateOnly(periodStart), periodEnd: isoDateOnly(periodEnd) } : undefined);
+  const ids = selectedIds;
+  const cards = available.data ?? [];
+  const allIds = useMemo(() => cards.map((card) => card.id), [cards]);
+
+  useEffect(() => {
+    setSelectedIds((current) => current.filter((id) => allIds.includes(id)));
+  }, [allIds]);
+
+  const toggle = (id: string) => setSelectedIds((current) => current.includes(id) ? current.filter((item) => item !== id) : [...current, id]);
+  const allSelected = allIds.length > 0 && allIds.every((id) => selectedIds.includes(id));
 
   const mutation = useMutation(
     () =>
@@ -192,7 +218,7 @@ function CreateExportModal({ onClose }: { onClose: () => void }) {
           </button>
           <button
             className="btn btn-primary"
-            disabled={mutation.running || !periodStart || !periodEnd || ids.length === 0}
+            disabled={mutation.running || available.loading || !periodStart || !periodEnd || ids.length === 0}
             onClick={() =>
               mutation.run({
                 onSuccess: (payrollExport) => {
@@ -213,7 +239,7 @@ function CreateExportModal({ onClose }: { onClose: () => void }) {
         </>
       }
     >
-      <ErrorAlert error={mutation.error} onDismiss={mutation.reset} />
+      <ErrorAlert error={mutation.error ?? available.error} onDismiss={mutation.reset} />
       {mutation.error?.status === 422 && (
         <div className="alert alert-warning">One or more workers have no {provider} employee mapping — add mappings first.</div>
       )}
@@ -233,9 +259,59 @@ function CreateExportModal({ onClose }: { onClose: () => void }) {
         <Field label="Period end" required>
           <TextInput value={periodEnd} onChange={setPeriodEnd} type="date" />
         </Field>
-        <Field label="Approved timesheet IDs (one per line)" required span2 hint="Only approved cards whose week-ending falls inside the period are accepted.">
-          <TextArea value={timesheetIds} onChange={setTimesheetIds} rows={5} />
-        </Field>
+      </div>
+      <div className="stack" style={{ marginTop: 14 }}>
+        <div className="row-between">
+          <div>
+            <h3>Approved timecards</h3>
+            <span className="tiny">Showing approved, unexported timecards for the selected payroll period.</span>
+          </div>
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={allIds.length === 0}
+            onClick={() => setSelectedIds(allSelected ? [] : allIds)}
+          >
+            {allSelected ? "Clear all" : "Select all in range"}
+          </button>
+        </div>
+        {available.loading && <div className="spinner" />}
+        {!available.loading && cards.length === 0 && (
+          <div className="empty">
+            <b>No approved timecards in this range</b>
+            <span>Change the dates or approve timecards before building the export.</span>
+          </div>
+        )}
+        {cards.length > 0 && (
+          <div className="table-wrap" style={{ maxHeight: 360, overflowY: "auto" }}>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th />
+                  <th>Worker</th>
+                  <th>Project</th>
+                  <th>Payroll week</th>
+                  <th>Hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cards.map((card) => (
+                  <tr key={card.id}>
+                    <td>
+                      <input type="checkbox" checked={selectedIds.includes(card.id)} onChange={() => toggle(card.id)} aria-label={`Select ${timecardWorker(card)} for ${formatDate(card.weekEnding)}`} />
+                    </td>
+                    <td>
+                      <b>{timecardWorker(card)}</b>
+                      <div className="tiny">{card.entries.length} shift{card.entries.length === 1 ? "" : "s"}</div>
+                    </td>
+                    <td className="tiny">{card.project ? `${card.project.code} · ${card.project.name}` : "Project not loaded"}</td>
+                    <td>{formatDate(card.weekEnding)}</td>
+                    <td>{minutesToHours(timecardTotal(card))}h</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </Modal>
   );
@@ -358,7 +434,6 @@ export function PayrollPage() {
                   <tr key={entry.id}>
                     <td>
                       <b>{entry.label}</b>
-                      <div className="mono tiny">{entry.id}</div>
                     </td>
                     <td className="tiny">{entry.sublabel}</td>
                     <td>

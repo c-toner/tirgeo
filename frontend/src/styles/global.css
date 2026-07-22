@@ -307,6 +307,34 @@ code, .mono { font-family: var(--mono); font-size: 0.92em; }
 .topbar h1 { flex: 1; min-width: 0; }
 .topbar .crumb { color: var(--ink-3); font-size: 13px; }
 .topbar .input { width: auto; min-width: 180px; max-width: 340px; }
+.topbar-actions {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.notification-button {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+
+.notification-button:hover {
+  background: var(--surface-2);
+}
 
 .construction-banner {
   align-items: center;
@@ -421,6 +449,7 @@ code, .mono { font-family: var(--mono); font-size: 0.92em; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
 .stack { display: flex; flex-direction: column; gap: 10px; }
 .spacer { flex: 1; }
+.mobile-actions-slot { display: none; }
 
 .muted { color: var(--ink-2); font-size: 13px; }
 .tiny { color: var(--ink-3); font-size: 12px; }
@@ -479,6 +508,20 @@ code, .mono { font-family: var(--mono); font-size: 0.92em; }
   position: absolute;
   right: 6px;
   top: 6px;
+}
+
+.photo-placeholder {
+  align-items: center;
+  background: var(--surface-2);
+  color: var(--ink-3);
+  display: flex;
+  font-size: 12px;
+  height: 100%;
+  justify-content: center;
+  min-height: 110px;
+  padding: 10px;
+  text-align: center;
+  width: 100%;
 }
 
 /* ---------- Field crew mode ---------- */
@@ -970,7 +1013,6 @@ table.table {
 }
 
 .work-map {
-  aspect-ratio: 16 / 9;
   background:
     linear-gradient(90deg, transparent 49.75%, rgba(255, 255, 255, 0.14) 50%, transparent 50.25%),
     linear-gradient(0deg, transparent 49.75%, rgba(255, 255, 255, 0.14) 50%, transparent 50.25%),
@@ -978,12 +1020,17 @@ table.table {
   background-size: 240px 240px, 240px 240px, auto;
   border: 1px solid var(--line);
   border-radius: 8px;
-  cursor: crosshair;
-  min-height: 380px;
+  cursor: grab;
+  height: clamp(340px, 58vh, 560px);
+  min-height: 340px;
   overflow: hidden;
   position: relative;
+  touch-action: none;
   user-select: none;
+  width: 100%;
 }
+
+.work-map:active { cursor: grabbing; }
 
 .work-map-tile {
   height: 256px;
@@ -1772,6 +1819,28 @@ table.table {
 
   .content { padding: 16px 14px calc(var(--mobile-nav-h) + var(--visual-viewport-bottom) + 28px + env(safe-area-inset-bottom)); }
   .topbar { display: none; }
+  .mobile-actions-slot {
+    background: color-mix(in srgb, var(--page) 90%, transparent);
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin: -16px -14px 0;
+    padding: 10px 14px;
+    position: sticky;
+    top: calc(54px + env(safe-area-inset-top, 0px));
+    z-index: 35;
+  }
+  .mobile-actions-slot > .btn,
+  .mobile-actions-slot > .row,
+  .mobile-actions-slot .btn {
+    min-height: 44px;
+  }
+  .mobile-actions-slot > .row {
+    justify-content: flex-end;
+    width: 100%;
+  }
   .stat-grid, .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-2, .form-grid { grid-template-columns: 1fr; }
@@ -1807,6 +1876,14 @@ table.table {
   .prestart-history-meta {
     align-items: flex-start;
     text-align: left;
+  }
+  .work-map {
+    height: min(62dvh, 520px);
+    min-height: 360px;
+  }
+  .work-map-controls {
+    overflow-x: auto;
+    padding-bottom: 2px;
   }
   .detail-grid,
   .answer-row,

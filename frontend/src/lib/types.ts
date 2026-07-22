@@ -101,9 +101,23 @@ export type AccountSection =
   | "TIMESHEETS"
   | "PAYROLL"
   | "COMMERCIAL"
+  | "COST_TRACKING"
   | "WORKER_DIRECTORY"
   | "USER_ADMIN"
   | "SETTINGS";
+export type CostEntryType =
+  | "LABOUR"
+  | "PLANT"
+  | "MATERIALS"
+  | "SUBCONTRACTOR"
+  | "HIRE"
+  | "DISPOSAL"
+  | "TRAFFIC_MANAGEMENT"
+  | "SURVEYING"
+  | "OVERHEAD"
+  | "OTHER";
+export type CostEntryStatus = "COMMITTED" | "ACCRUED" | "INVOICED" | "APPROVED" | "PAID" | "DISPUTED";
+export type ForecastConfidence = "LOW" | "MEDIUM" | "HIGH";
 export type SafetyDocumentType =
   | "SWMS"
   | "JSA"
@@ -147,6 +161,92 @@ export interface Project {
   startDate?: string | null;
   endDate?: string | null;
   createdAt?: string;
+}
+
+export interface ProjectCostPlan {
+  id: string;
+  projectId: string;
+  contractBudget?: string | number | null;
+  contingencyAmount: string | number;
+  targetMarginPercent?: string | number | null;
+  notes?: string | null;
+  updatedAt: string;
+}
+
+export interface CostSummary {
+  contractValue: number;
+  approvedVariations: number;
+  revisedContractValue: number;
+  budgetedCost: number;
+  approvedLabourCost: number;
+  actualCost: number;
+  committedCost: number;
+  forecastToComplete: number;
+  forecastFinalCost: number;
+  forecastProfit: number;
+  forecastMarginPercent: number | null;
+  claimedAmount: number;
+  certifiedAmount: number;
+  costToDatePercent: number | null;
+  marginStatus: "GOOD" | "WATCH" | "AT_RISK" | "LOSS";
+}
+
+export interface CostTrackingProjectSummary {
+  project: Pick<Project, "id" | "code" | "name" | "clientName" | "status">;
+  summary: CostSummary;
+  costPlan?: ProjectCostPlan | null;
+}
+
+export interface CostEntry {
+  id: string;
+  projectId: string;
+  costCodeId?: string | null;
+  type: CostEntryType;
+  status: CostEntryStatus;
+  supplier?: string | null;
+  description: string;
+  incurredAt: string;
+  invoiceNumber?: string | null;
+  quantity?: string | number | null;
+  unit?: string | null;
+  unitRate?: string | number | null;
+  amount: string | number;
+  gstAmount: string | number;
+  committed: boolean;
+  source: string;
+  createdAt: string;
+  costCode?: { id: string; code: string; description: string } | null;
+}
+
+export interface CostForecast {
+  id: string;
+  projectId: string;
+  costCodeId?: string | null;
+  type: CostEntryType;
+  description: string;
+  amount: string | number;
+  confidence: ForecastConfidence;
+  createdAt: string;
+  resolvedAt?: string | null;
+  costCode?: { id: string; code: string; description: string } | null;
+}
+
+export interface CostCode {
+  id: string;
+  projectId: string;
+  code: string;
+  description: string;
+  budgetLabour: string | number;
+  budgetPlant: string | number;
+  budgetMaterials: string | number;
+}
+
+export interface CostTrackingProjectDetail extends CostTrackingProjectSummary {
+  costCodes: CostCode[];
+  costEntries: CostEntry[];
+  costForecasts: CostForecast[];
+  progressClaims: Array<{ id: string; claimNumber: number; claimedAmount: string | number; certifiedAmount?: string | number | null; status: Status; periodEnd: string }>;
+  variations: Array<{ id: string; reference: string; title: string; quotedAmount?: string | number | null; approvedAmount?: string | number | null; status: Status }>;
 }
 
 export interface ChainageAlignment {

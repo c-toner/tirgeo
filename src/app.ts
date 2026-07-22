@@ -53,7 +53,13 @@ async function fileExists(filePath: string) {
 
 export async function buildApp() {
   const app = Fastify({ logger: { redact: ["req.headers.authorization", "body.password", "body.pin", "body.currentPin", "body.payrollDetails", "body.payrollDetailsEncrypted"] }, trustProxy: config.TRUST_PROXY });
-  await app.register(helmet);
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        "img-src": ["'self'", "data:", "blob:", "https://tile.openstreetmap.org"],
+      },
+    },
+  });
   await app.register(cors, { origin: corsOrigins.length ? corsOrigins : false });
   await app.register(rateLimit, { max: 200, timeWindow: "1 minute" });
   await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024, files: 1 } });

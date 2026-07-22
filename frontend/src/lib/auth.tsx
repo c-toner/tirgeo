@@ -75,11 +75,13 @@ export const TEMPLATE_ADMINS: Role[] = ["OWNER", "ADMIN"];
 
 const COMPLETED_PRE_START_ROLES: Role[] = ["OWNER", "ADMIN", "PROJECT_MANAGER", "OPERATIONS_MANAGER", "SUPERVISOR", "SITE_SUPERVISOR", "SITE_ENGINEER", "FOREMAN", "SAFETY_MANAGER"];
 const CHAINAGE_ROLES: Role[] = COMPLETED_PRE_START_ROLES;
+const COMMERCIAL_ROLES: Role[] = ["OWNER", "ADMIN", "PROJECT_MANAGER", "OPERATIONS_MANAGER"];
 
 export function canAccessSection(user: AuthUser | null | undefined, section: AccountSection): boolean {
   if (!user) return false;
   if (user.sections.includes(section)) return true;
   if (section === "COMPLETED_PRE_STARTS") return COMPLETED_PRE_START_ROLES.includes(user.role);
   if (section === "CHAINAGE") return CHAINAGE_ROLES.includes(user.role);
+  if (section === "COST_TRACKING") return COMMERCIAL_ROLES.includes(user.role);
   return false;
 }

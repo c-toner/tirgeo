@@ -60,6 +60,7 @@ const SECTION_LABELS: Record<AccountSection, string> = {
   TIMESHEETS: "Timesheets",
   PAYROLL: "Payroll",
   COMMERCIAL: "Commercial",
+  COST_TRACKING: "Cost tracking",
   WORKER_DIRECTORY: "Worker directory",
   USER_ADMIN: "User admin",
   SETTINGS: "Settings",

@@ -202,11 +202,18 @@ const routes: FastifyPluginAsync = async app => {
       if (photoCount !== submittedPhotoIds.length) return reply.code(400).send({ error: "Every pre-start photo must belong to this organisation" });
     }
     if (body.result === InspectionResult.OUT_OF_SERVICE && body.answers["lockout-tagout"] !== true) return reply.code(409).send({ error: "Out-of-service plant must be locked out or tagged out" });
-    const [preStart] = await app.prisma.$transaction([
-      app.prisma.plantPreStart.create({ data: { ...body, checklistTemplateId: template.id, plantId: id, checklistVersion: `${template.name}:v${template.version}`, answers: body.answers, defects: body.defects } }),
-      app.prisma.plant.update({ where: { id }, data: { status: body.result === InspectionResult.OUT_OF_SERVICE ? "OUT_OF_SERVICE" : body.result === InspectionResult.DEFECT ? "DEFECT_REPORTED" : undefined, hourMeter: body.hourMeter, odometerKm: body.odometerKm, currentProjectId: body.projectId ?? plant.currentProjectId } }),
-      app.prisma.auditEvent.create({ data: auditData(req, "PRE_START", "Plant", id, { result: body.result, checklistTemplateId: template.id, checklistVersion: template.version, workerId: body.workerId }) }),
-    ]);
+    const preStart = await app.prisma.$transaction(async tx => {
+      const created = await tx.plantPreStart.create({ data: { ...body, checklistTemplateId: template.id, plantId: id, checklistVersion: `${template.name}:v${template.version}`, answers: body.answers, defects: body.defects } });
+      if (submittedPhotoIds.length) {
+        await tx.fileAsset.updateMany({
+          where: { id: { in: submittedPhotoIds }, organisationId: req.auth.organisationId, deletedAt: null },
+          data: { entityType: "PlantPreStart", entityId: created.id, projectId: body.projectId ?? plant.currentProjectId },
+        });
+      }
+      await tx.plant.update({ where: { id }, data: { status: body.result === InspectionResult.OUT_OF_SERVICE ? "OUT_OF_SERVICE" : body.result === InspectionResult.DEFECT ? "DEFECT_REPORTED" : undefined, hourMeter: body.hourMeter, odometerKm: body.odometerKm, currentProjectId: body.projectId ?? plant.currentProjectId } });
+      await tx.auditEvent.create({ data: auditData(req, "PRE_START", "Plant", id, { result: body.result, checklistTemplateId: template.id, checklistVersion: template.version, workerId: body.workerId, photoIds: submittedPhotoIds }) });
+      return created;
+    });
     return reply.code(201).send(preStart);
   });
   app.post("/:id/clearance", { preHandler: allow(...plantClearers) }, async (req, reply) => {

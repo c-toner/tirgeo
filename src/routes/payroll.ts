@@ -35,6 +35,26 @@ const routes: FastifyPluginAsync = async app => {
     return app.prisma.payrollPayItemMapping.upsert({ where: { connectionId_localCode: { connectionId: connection.id, localCode: p.localCode } }, create: { connectionId: connection.id, localCode: p.localCode, externalPayItemId }, update: { externalPayItemId } });
   });
 
+  app.get("/approved-timesheets", { preHandler: payrollManagers }, async req => {
+    const now = new Date();
+    const defaults = { periodStart: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000), periodEnd: now };
+    const query = z.object({ periodStart: z.coerce.date().optional(), periodEnd: z.coerce.date().optional() }).parse(req.query);
+    const periodStart = query.periodStart ?? defaults.periodStart;
+    const periodEnd = query.periodEnd ?? defaults.periodEnd;
+    if (periodEnd < periodStart) throw Object.assign(new Error("periodEnd must be on or after periodStart"), { statusCode: 400 });
+    return app.prisma.timesheet.findMany({
+      where: {
+        status: Status.APPROVED,
+        weekEnding: { gte: periodStart, lte: periodEnd },
+        payrollExportItems: { none: { payrollExport: { status: { not: PayrollExportStatus.FAILED } } } },
+        project: { organisationId: req.auth.organisationId },
+      },
+      include: { worker: true, project: true, entries: { include: { costCode: true }, orderBy: { workDate: "asc" } } },
+      orderBy: [{ weekEnding: "desc" }, { approvedAt: "desc" }],
+      take: 300,
+    });
+  });
+
   app.post("/exports", { preHandler: payrollManagers }, async (req, reply) => {
     const body = z.object({ provider: z.nativeEnum(AccountingProvider), periodStart: z.coerce.date(), periodEnd: z.coerce.date(), timesheetIds: z.array(z.string().uuid()).min(1) }).refine(v => v.periodEnd >= v.periodStart, "periodEnd must be on or after periodStart").parse(req.body);
     const payrollExport = await app.prisma.$transaction(async tx => {

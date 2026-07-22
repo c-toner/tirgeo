@@ -19,7 +19,7 @@ import type { SignatureValue } from "../../components/SignaturePad.tsx";
 import { WorkerSelect } from "../../components/WorkerSelect.tsx";
 import { api } from "../../lib/api.ts";
 import { TIMESHEET_APPROVERS, useAuth } from "../../lib/auth.tsx";
-import { formatDate, minutesToHours, titleCase, uuid } from "../../lib/format.ts";
+import { formatDate, formatDateTime, minutesToHours, titleCase, uuid } from "../../lib/format.ts";
 import { usePath } from "../../lib/router.tsx";
 import type { ApproverSummary, Timesheet } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
@@ -82,6 +82,23 @@ function timecardLabel(timesheet: Timesheet): string {
   return `${dates.length} days to ${formatDate(timesheet.weekEnding)}`;
 }
 
+function timecardMinutes(timesheet: Timesheet): number {
+  return timesheet.entries.reduce((sum, entry) => sum + entry.ordinaryMinutes + entry.overtimeMinutes, 0);
+}
+
+function workerName(timesheet: Timesheet): string {
+  return timesheet.worker ? `${timesheet.worker.firstName} ${timesheet.worker.lastName}` : "Worker";
+}
+
+async function verifySigningPin(approverUserId: string, pin: string): Promise<string | null> {
+  try {
+    await api("/api/v1/timesheets/verify-signing-pin", { method: "POST", body: { approverUserId, pin } });
+    return null;
+  } catch (error) {
+    return error instanceof Error ? error.message : "Signing PIN could not be verified";
+  }
+}
+
 function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCreated: (timesheet: Timesheet) => void }) {
   const { user } = useAuth();
   const toast = useToast();
@@ -96,6 +113,8 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [approvalMode, setApprovalMode] = useState<"request" | "onsite" | null>(null);
   const [approverUserId, setApproverUserId] = useState("");
   const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [verifyingPin, setVerifyingPin] = useState(false);
   const [approverName, setApproverName] = useState("");
   const [approverSignature, setApproverSignature] = useState<SignatureValue | null>(null);
   const weekEnding = weekEndingForEntries(entries);
@@ -234,17 +253,25 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
           {lodgedTimesheet && approvalMode === "onsite" && (
             <button
               className="btn btn-primary"
-              disabled={onsiteMutation.running || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2}
-              onClick={() =>
+              disabled={verifyingPin || onsiteMutation.running || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2}
+              onClick={async () => {
+                setVerifyingPin(true);
+                setPinError(null);
+                const error = await verifySigningPin(approverUserId, pin);
+                setVerifyingPin(false);
+                if (error) {
+                  setPinError(error);
+                  return;
+                }
                 onsiteMutation.run({
                   onSuccess: () => {
                     toast.push("Timecard approved on site");
                     onClose();
                   },
-                })
-              }
+                });
+              }}
             >
-              {onsiteMutation.running ? "Signing..." : "Add signature & approve"}
+              {verifyingPin ? "Checking PIN..." : onsiteMutation.running ? "Signing..." : "Add signature & approve"}
             </button>
           )}
         </>
@@ -357,7 +384,10 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
             <Field label="Approver" required hint="Owner, admin, PM, supervisor or foreman.">
               <Select
                 value={approverUserId}
-                onChange={setApproverUserId}
+                onChange={(value) => {
+                  setApproverUserId(value);
+                  setPinError(null);
+                }}
                 allowEmpty
                 emptyLabel="— Select approver —"
                 options={(approvers ?? []).map((approver) => ({
@@ -369,8 +399,8 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
           )}
           {approvalMode === "onsite" && (
             <>
-              <Field label="Approver PIN" required hint="The approver enters their 4-digit signing PIN.">
-                <TextInput value={pin} onChange={setPin} type="password" inputMode="numeric" maxLength={4} placeholder="0000" />
+              <Field label="Approver PIN" required hint="The approver enters their 4-digit signing PIN." error={pinError ?? undefined}>
+                <TextInput value={pin} onChange={(value) => { setPin(value); setPinError(null); }} type="password" inputMode="numeric" maxLength={4} placeholder="0000" invalid={!!pinError} />
               </Field>
               <SignaturePad signedName={approverName} onNameChange={setApproverName} onChange={setApproverSignature} nameLabel="Approver name" />
             </>
@@ -391,6 +421,8 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
   const [signedName, setSignedName] = useState(user?.name ?? "");
   const [signature, setSignature] = useState<SignatureValue | null>(null);
   const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [verifyingPin, setVerifyingPin] = useState(false);
   const [approverName, setApproverName] = useState("");
   const [approverSignature, setApproverSignature] = useState<SignatureValue | null>(null);
   const [consent, setConsent] = useState(false);
@@ -472,17 +504,25 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
           {lodged && approvalMode === "onsite" && (
             <button
               className="btn btn-primary"
-              disabled={onsiteMutation.running || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2}
-              onClick={() =>
+              disabled={verifyingPin || onsiteMutation.running || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2}
+              onClick={async () => {
+                setVerifyingPin(true);
+                setPinError(null);
+                const error = await verifySigningPin(approverUserId, pin);
+                setVerifyingPin(false);
+                if (error) {
+                  setPinError(error);
+                  return;
+                }
                 onsiteMutation.run({
                   onSuccess: () => {
                     toast.push("Timecard approved on site");
                     onClose();
                   },
-                })
-              }
+                });
+              }}
             >
-              {onsiteMutation.running ? "Signing..." : "Add signature & approve"}
+              {verifyingPin ? "Checking PIN..." : onsiteMutation.running ? "Signing..." : "Add signature & approve"}
             </button>
           )}
         </>
@@ -514,7 +554,10 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
             <Field label="Approver" required hint="Owner, admin, PM, supervisor or foreman.">
               <Select
                 value={approverUserId}
-                onChange={setApproverUserId}
+                onChange={(value) => {
+                  setApproverUserId(value);
+                  setPinError(null);
+                }}
                 allowEmpty
                 emptyLabel="— Select approver —"
                 options={(approvers ?? []).map((approver) => ({
@@ -526,8 +569,8 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
           )}
           {approvalMode === "onsite" && (
             <>
-              <Field label="Approver PIN" required hint="The approver enters their 4-digit signing PIN.">
-                <TextInput value={pin} onChange={setPin} type="password" inputMode="numeric" maxLength={4} placeholder="0000" />
+              <Field label="Approver PIN" required hint="The approver enters their 4-digit signing PIN." error={pinError ?? undefined}>
+                <TextInput value={pin} onChange={(value) => { setPin(value); setPinError(null); }} type="password" inputMode="numeric" maxLength={4} placeholder="0000" invalid={!!pinError} />
               </Field>
               <SignaturePad signedName={approverName} onNameChange={setApproverName} onChange={setApproverSignature} nameLabel="Approver name" />
             </>
@@ -552,6 +595,8 @@ function ApproveModal({
   const { data: approvers } = useApiQuery<ApproverSummary[]>(mode === "onsite" ? "/api/v1/timesheets/approvers" : null);
   const [approverUserId, setApproverUserId] = useState("");
   const [pin, setPin] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [verifyingPin, setVerifyingPin] = useState(false);
   const [signedName, setSignedName] = useState(mode === "approve" ? (user?.name ?? "") : "");
   const [signature, setSignature] = useState<SignatureValue | null>(null);
   const [consent, setConsent] = useState(false);
@@ -596,17 +641,27 @@ function ApproveModal({
           </button>
           <button
             className="btn btn-primary"
-            disabled={mutation.running || !ready}
-            onClick={() =>
+            disabled={verifyingPin || mutation.running || !ready}
+            onClick={async () => {
+              if (mode === "onsite") {
+                setVerifyingPin(true);
+                setPinError(null);
+                const error = await verifySigningPin(approverUserId, pin);
+                setVerifyingPin(false);
+                if (error) {
+                  setPinError(error);
+                  return;
+                }
+              }
               mutation.run({
                 onSuccess: () => {
                   toast.push("Timecard approved");
                   onClose();
                 },
-              })
-            }
+              });
+            }}
           >
-            {mutation.running ? "Signing…" : "Countersign & approve"}
+            {verifyingPin ? "Checking PIN..." : mutation.running ? "Signing…" : "Countersign & approve"}
           </button>
         </>
       }
@@ -626,7 +681,10 @@ function ApproveModal({
           <Field label="Approver" required>
             <Select
               value={approverUserId}
-              onChange={setApproverUserId}
+              onChange={(value) => {
+                setApproverUserId(value);
+                setPinError(null);
+              }}
               allowEmpty
               emptyLabel="— Who is approving? —"
               options={(approvers ?? []).map((approver) => ({
@@ -635,8 +693,8 @@ function ApproveModal({
               }))}
             />
           </Field>
-          <Field label="Signing PIN" required hint="4 digits. Set once in Settings after first login. 5 failed attempts locks for 15 minutes.">
-            <TextInput value={pin} onChange={setPin} type="password" inputMode="numeric" maxLength={4} placeholder="••••" />
+          <Field label="Signing PIN" required hint="4 digits. Set once in Settings after first login. 5 failed attempts locks for 15 minutes." error={pinError ?? undefined}>
+            <TextInput value={pin} onChange={(value) => { setPin(value); setPinError(null); }} type="password" inputMode="numeric" maxLength={4} placeholder="••••" invalid={!!pinError} />
           </Field>
         </>
       )}
@@ -645,6 +703,123 @@ function ApproveModal({
         <input type="checkbox" checked={consent} onChange={(e: { target: { checked: boolean } }) => setConsent(e.target.checked)} style={{ marginTop: 3 }} />
         <span>I have reviewed this timecard and approve the recorded hours.</span>
       </label>
+    </Modal>
+  );
+}
+
+function TimecardDetailModal({
+  timesheetId,
+  canApprove,
+  onClose,
+  onApprove,
+  onReject,
+}: {
+  timesheetId: string;
+  canApprove: boolean;
+  onClose: () => void;
+  onApprove: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
+  const { data, loading, error } = useApiQuery<Timesheet>(`/api/v1/timesheets/${timesheetId}`);
+
+  return (
+    <Modal
+      title="Timecard details"
+      large
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>
+            Close
+          </button>
+          {canApprove && data?.status === "SUBMITTED" && (
+            <>
+              <button className="btn btn-danger" onClick={() => onReject(data.id)}>
+                Reject
+              </button>
+              <button className="btn btn-primary" onClick={() => onApprove(data.id)}>
+                Sign & approve
+              </button>
+            </>
+          )}
+        </>
+      }
+    >
+      <ErrorAlert error={error} />
+      {loading && <Loading />}
+      {data && (
+        <div className="stack">
+          <div className="grid grid-3">
+            <div className="summary-item">
+              <span>Worker</span>
+              <b>{workerName(data)}</b>
+            </div>
+            <div className="summary-item">
+              <span>Project</span>
+              <b>{data.project ? `${data.project.code} - ${data.project.name}` : "Project not loaded"}</b>
+            </div>
+            <div className="summary-item">
+              <span>Status</span>
+              <b><StatusBadge status={data.status} /></b>
+            </div>
+            <div className="summary-item">
+              <span>Timecard</span>
+              <b>{timecardLabel(data)}</b>
+            </div>
+            <div className="summary-item">
+              <span>Payroll week</span>
+              <b>{formatDate(data.weekEnding)}</b>
+            </div>
+            <div className="summary-item">
+              <span>Total hours</span>
+              <b>{minutesToHours(timecardMinutes(data))}h</b>
+            </div>
+          </div>
+
+          <div className="table-wrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Start</th>
+                  <th>Finish</th>
+                  <th>Break</th>
+                  <th>Ordinary</th>
+                  <th>Overtime</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.entries.map((entry) => (
+                  <tr key={entry.id}>
+                    <td>{formatDate(entry.workDate)}</td>
+                    <td>{formatDateTime(entry.startedAt)}</td>
+                    <td>{formatDateTime(entry.finishedAt)}</td>
+                    <td>{entry.unpaidBreakMinutes} min</td>
+                    <td>{minutesToHours(entry.ordinaryMinutes)}h</td>
+                    <td>{minutesToHours(entry.overtimeMinutes)}h</td>
+                    <td className="tiny">{entry.notes || "No notes"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <section className="card card-pad stack" style={{ boxShadow: "none" }}>
+            <h3>Signature record</h3>
+            {(data.signatures ?? []).length === 0 ? (
+              <span className="muted">No signatures recorded.</span>
+            ) : (
+              (data.signatures ?? []).map((signature) => (
+                <div key={signature.id} className="summary-list-item">
+                  <b>{titleCase(signature.type)} signature</b>
+                  <span>{signature.signedName} · {formatDateTime(signature.signedAt ?? signature.createdAt)}</span>
+                </div>
+              ))
+            )}
+          </section>
+        </div>
+      )}
     </Modal>
   );
 }
@@ -702,7 +877,7 @@ export function TimesheetsPage() {
   const [approveFor, setApproveFor] = useState<string | null>(null);
   const [onsiteFor, setOnsiteFor] = useState<string | null>(null);
   const [rejectFor, setRejectFor] = useState<string | null>(null);
-  const [actionId, setActionId] = useState(openParam ?? "");
+  const [detailFor, setDetailFor] = useState<string | null>(openParam || null);
   const [, forceRender] = useState(0);
   const { data: myTimecards, loading: myLoading, error: myError, refresh: refreshMine } = useApiQuery<Timesheet[]>("/api/v1/timesheets");
   const { data: pendingApprovals, loading: pendingLoading, error: pendingError, refresh: refreshPending } = useApiQuery<Timesheet[]>(isApprover ? "/api/v1/timesheets/pending-approvals" : null);
@@ -767,13 +942,25 @@ export function TimesheetsPage() {
               </thead>
               <tbody>
                 {myTimecards.map((card) => (
-                  <tr key={card.id}>
+                  <tr
+                    key={card.id}
+                    className="clickable-row"
+                    tabIndex={0}
+                    onClick={() => setDetailFor(card.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        setDetailFor(card.id);
+                      }
+                    }}
+                    aria-label={`Open timecard for ${timecardLabel(card)}`}
+                  >
                     <td>
                       <b>{timecardLabel(card)}</b>
-                      <div className="mono tiny">{card.id}</div>
+                      <div className="tiny">{card.entries.length} shift{card.entries.length === 1 ? "" : "s"}</div>
                     </td>
                     <td className="tiny">
-                      {card.project ? `${card.project.code} · ${card.project.name}` : card.projectId}
+                      {card.project ? `${card.project.code} · ${card.project.name}` : "Project not loaded"}
                       <br />
                       {card.entries.length} shift{card.entries.length === 1 ? "" : "s"} · payroll week {formatDate(card.weekEnding)}
                     </td>
@@ -783,20 +970,23 @@ export function TimesheetsPage() {
                     <td>
                       <div className="row" style={{ gap: 6, justifyContent: "flex-end", flexWrap: "nowrap" }}>
                         {card.status === "DRAFT" && (
-                          <button className="btn btn-accent btn-sm" onClick={() => setSubmitFor(card.id)}>
+                          <button className="btn btn-accent btn-sm" onClick={(event) => { event.stopPropagation(); setSubmitFor(card.id); }}>
                             Finish & lodge
                           </button>
                         )}
                         {card.status === "SUBMITTED" && (
-                          <button className="btn btn-ghost btn-sm" onClick={() => setOnsiteFor(card.id)}>
+                          <button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setOnsiteFor(card.id); }}>
                             On-site countersign
                           </button>
                         )}
                         {card.status === "REJECTED" && (
-                          <button className="btn btn-ghost btn-sm" onClick={() => correct(card.id)}>
+                          <button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); correct(card.id); }}>
                             Create correction
                           </button>
                         )}
+                        <button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setDetailFor(card.id); }}>
+                          View
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -833,20 +1023,33 @@ export function TimesheetsPage() {
                   {pendingApprovals.map(card => {
                     const totals = card.entries.map(entry => entry.ordinaryMinutes + entry.overtimeMinutes).reduce((sum, value) => sum + value, 0);
                     return (
-                      <tr key={card.id}>
+                      <tr
+                        key={card.id}
+                        className="clickable-row"
+                        tabIndex={0}
+                        onClick={() => setDetailFor(card.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            setDetailFor(card.id);
+                          }
+                        }}
+                        aria-label={`Open approval timecard for ${workerName(card)}`}
+                      >
                         <td>
                           <b>{card.worker ? `${card.worker.firstName} ${card.worker.lastName}` : "Worker"}</b>
-                          <div className="tiny">{card.project ? `${card.project.code} · ${card.project.name}` : card.projectId}</div>
+                          <div className="tiny">{card.project ? `${card.project.code} · ${card.project.name}` : "Project not loaded"}</div>
                         </td>
                         <td>
                           <b>{timecardLabel(card)}</b>
-                          <div className="mono tiny">{card.id}</div>
+                          <div className="tiny">Payroll week {formatDate(card.weekEnding)}</div>
                         </td>
                         <td className="tiny">{minutesToHours(totals)}h</td>
                         <td>
                           <div className="row" style={{ justifyContent: "flex-end", gap: 6, flexWrap: "nowrap" }}>
-                            <button className="btn btn-primary btn-sm" onClick={() => setApproveFor(card.id)}>Sign</button>
-                            <button className="btn btn-danger btn-sm" onClick={() => setRejectFor(card.id)}>Reject</button>
+                            <button className="btn btn-ghost btn-sm" onClick={(event) => { event.stopPropagation(); setDetailFor(card.id); }}>View</button>
+                            <button className="btn btn-primary btn-sm" onClick={(event) => { event.stopPropagation(); setApproveFor(card.id); }}>Sign</button>
+                            <button className="btn btn-danger btn-sm" onClick={(event) => { event.stopPropagation(); setRejectFor(card.id); }}>Reject</button>
                           </div>
                         </td>
                       </tr>
@@ -859,37 +1062,23 @@ export function TimesheetsPage() {
         </section>
       )}
 
-      {isApprover && (
-        <section className="card">
-          <div className="card-header">
-            <h2>Find timecard</h2>
-            <span className="hint">Use a timecard ID from a notification or message.</span>
-          </div>
-          <div className="card-pad stack">
-            <div className="row">
-              <input
-                className="input mono"
-                style={{ maxWidth: 380 }}
-                placeholder="Timecard ID from the notification…"
-                value={actionId}
-                onChange={(e: { target: { value: string } }) => setActionId(e.target.value)}
-              />
-              <button className="btn btn-primary" disabled={!actionId.trim()} onClick={() => setApproveFor(actionId.trim())}>
-                Approve
-              </button>
-              <button className="btn btn-danger" disabled={!actionId.trim()} onClick={() => setRejectFor(actionId.trim())}>
-                Reject
-              </button>
-            </div>
-            <span className="tiny">
-              Approval re-hashes the card and refuses to sign if anything changed after the employee's signature.
-            </span>
-          </div>
-        </section>
-      )}
-
       {drafting && <DraftTimesheetModal onClose={() => setDrafting(false)} onCreated={() => forceRender((n) => n + 1)} />}
       {submitFor && <SubmitModal timesheetId={submitFor} onClose={() => { setSubmitFor(null); forceRender((n) => n + 1); }} />}
+      {detailFor && (
+        <TimecardDetailModal
+          timesheetId={detailFor}
+          canApprove={isApprover}
+          onClose={() => setDetailFor(null)}
+          onApprove={(id) => {
+            setDetailFor(null);
+            setApproveFor(id);
+          }}
+          onReject={(id) => {
+            setDetailFor(null);
+            setRejectFor(id);
+          }}
+        />
+      )}
       {approveFor && <ApproveModal timesheetId={approveFor} mode="approve" onClose={() => { setApproveFor(null); refreshPending(); forceRender((n) => n + 1); }} />}
       {onsiteFor && <ApproveModal timesheetId={onsiteFor} mode="onsite" onClose={() => { setOnsiteFor(null); forceRender((n) => n + 1); }} />}
       {rejectFor && <RejectModal timesheetId={rejectFor} onClose={() => { setRejectFor(null); refreshPending(); forceRender((n) => n + 1); }} />}
