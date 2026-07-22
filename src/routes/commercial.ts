@@ -77,7 +77,17 @@ const routes: FastifyPluginAsync = async app => {
   });
   app.get("/tenders/:id", { preHandler: managers }, async req => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
-    return app.prisma.tender.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId }, include: { documents: { orderBy: { uploadedAt: "desc" } }, requirements: { orderBy: [{ mandatory: "desc" }, { category: "asc" }] }, checklistItems: { orderBy: [{ mandatory: "desc" }, { title: "asc" }] } } });
+    return app.prisma.tender.findFirstOrThrow({
+      where: { id, organisationId: req.auth.organisationId },
+      include: {
+        documents: { orderBy: { uploadedAt: "desc" } },
+        requirements: { where: { reviewStatus: { not: "SUPERSEDED" } }, orderBy: [{ mandatory: "desc" }, { category: "asc" }] },
+        checklistItems: {
+          where: { OR: [{ requirementId: null }, { requirement: { is: { reviewStatus: { not: "SUPERSEDED" } } } }] },
+          orderBy: [{ mandatory: "desc" }, { title: "asc" }],
+        },
+      },
+    });
   });
   app.post("/tenders/:id/documents", { preHandler: managers }, async (req, reply) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
@@ -95,21 +105,22 @@ const routes: FastifyPluginAsync = async app => {
       warning: "You have already uploaded this document. Re-uploading will reset extracted requirements and checklist progress for this document.",
     });
     const safeName = upload.filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-160) || "tender-document";
-    const storageKey = `organisations/${req.auth.organisationId}/tenders/${id}/${randomUUID()}-${safeName}`;
+    const storageKey = duplicate?.storageKey ?? `organisations/${req.auth.organisationId}/tenders/${id}/${randomUUID()}-${safeName}`;
     const blob = await import("@vercel/blob");
-    await blob.put(storageKey, buffer, {
-      access: "private",
-      contentType: upload.mimetype,
-      addRandomSuffix: false,
-    });
+    if (!duplicate) {
+      await blob.put(storageKey, buffer, {
+        access: "private",
+        contentType: upload.mimetype,
+        addRandomSuffix: false,
+      });
+    }
     let document;
-    const previousStorageKey = duplicate?.storageKey;
     try {
       document = duplicate
         ? await app.prisma.tenderDocument.update({ where: { id: duplicate.id }, data: { name: upload.filename, mimeType: upload.mimetype, storageKey, sha256, sizeBytes: buffer.length, uploadedById: req.auth.userId, uploadedAt: new Date(), processingStatus: "PROCESSING", processingError: null, pageCount: null } })
         : await app.prisma.tenderDocument.create({ data: { tenderId: id, name: upload.filename, mimeType: upload.mimetype, storageKey, sha256, sizeBytes: buffer.length, uploadedById: req.auth.userId, processingStatus: "PROCESSING" } });
     } catch (error: any) {
-      await blob.del(storageKey).catch(() => undefined);
+      if (!duplicate) await blob.del(storageKey).catch(() => undefined);
       if (error?.code === "P2002") return reply.code(409).send({
         error: "This document has already been uploaded to the tender",
         code: "DUPLICATE_TENDER_DOCUMENT",
@@ -120,31 +131,40 @@ const routes: FastifyPluginAsync = async app => {
     try {
       const parsed = await extractTenderText(buffer, upload.mimetype, upload.filename);
       const suggestions = analyseTender(parsed.sections);
-      await app.prisma.$transaction(async tx => {
-        if (duplicate) {
-          const existingRequirements = await tx.tenderRequirement.findMany({ where: { tenderId: id, documentId: document.id }, select: { id: true } });
-          const requirementIds = existingRequirements.map(requirement => requirement.id);
-          if (requirementIds.length) await tx.tenderChecklistItem.deleteMany({ where: { tenderId: id, requirementId: { in: requirementIds } } });
-          await tx.tenderRequirement.deleteMany({ where: { tenderId: id, documentId: document.id } });
-        }
-        await tx.tenderDocument.update({ where: { id: document.id }, data: { processingStatus: suggestions.length ? "REVIEW_REQUIRED" : "NO_REQUIREMENTS_FOUND", pageCount: parsed.pageCount } });
-        for (const suggestion of suggestions) {
-          const requirement = await tx.tenderRequirement.create({ data: { tenderId: id, documentId: document.id, ...suggestion } });
-          await tx.tenderChecklistItem.create({ data: { tenderId: id, requirementId: requirement.id, title: suggestion.title, description: suggestion.detail, mandatory: suggestion.mandatory } });
-        }
-        if (await tx.tenderChecklistItem.count({ where: { tenderId: id, requirementId: null } }) === 0) await tx.tenderChecklistItem.createMany({ data: [
+      if (duplicate) {
+        const existingRequirements = await app.prisma.tenderRequirement.findMany({ where: { tenderId: id, documentId: document.id }, select: { id: true } });
+        const requirementIds = existingRequirements.map(requirement => requirement.id);
+        if (requirementIds.length) await app.prisma.tenderChecklistItem.updateMany({ where: { tenderId: id, requirementId: { in: requirementIds } }, data: { status: "NOT_APPLICABLE", completedAt: null } });
+        await app.prisma.tenderRequirement.updateMany({ where: { tenderId: id, documentId: document.id }, data: { reviewStatus: "SUPERSEDED" } });
+      }
+      await app.prisma.tenderDocument.update({ where: { id: document.id }, data: { processingStatus: suggestions.length ? "REVIEW_REQUIRED" : "NO_REQUIREMENTS_FOUND", pageCount: parsed.pageCount } });
+      for (const suggestion of suggestions) {
+        await app.prisma.tenderRequirement.create({
+          data: {
+            tenderId: id,
+            documentId: document.id,
+            ...suggestion,
+            checklistItems: { create: { tenderId: id, title: suggestion.title, description: suggestion.detail, mandatory: suggestion.mandatory } },
+          },
+        });
+      }
+      if (await app.prisma.tenderChecklistItem.count({ where: { tenderId: id, requirementId: null } }) === 0) {
+        await app.prisma.tenderChecklistItem.createMany({ data: [
           { tenderId: id, title: "Confirm closing date, time and submission method", mandatory: true },
           { tenderId: id, title: "Review all addenda and tender clarifications", mandatory: true },
           { tenderId: id, title: "Complete pricing schedules and check arithmetic", mandatory: true },
           { tenderId: id, title: "Complete declarations, licences and insurance evidence", mandatory: true },
           { tenderId: id, title: "Final authorised submission review", mandatory: true },
         ] });
+      }
+      const result = await app.prisma.tenderDocument.findUniqueOrThrow({
+        where: { id: document.id },
+        include: { requirements: { where: { reviewStatus: { not: "SUPERSEDED" } } } },
       });
-      const result = await app.prisma.tenderDocument.findUniqueOrThrow({ where: { id: document.id }, include: { requirements: true } });
-      if (previousStorageKey && previousStorageKey !== storageKey) await blob.del(previousStorageKey).catch(() => undefined);
       await audit(app, req, duplicate ? "REUPLOAD_AND_ANALYSE" : "UPLOAD_AND_ANALYSE", "TenderDocument", document.id, { tenderId: id, requirementsFound: suggestions.length, resetDuplicate: Boolean(duplicate) });
       return reply.code(duplicate ? 200 : 201).send(result);
     } catch (error) {
+      await app.prisma.tenderRequirement.updateMany({ where: { tenderId: id, documentId: document.id }, data: { reviewStatus: "SUPERSEDED" } });
       await app.prisma.tenderDocument.update({ where: { id: document.id }, data: { processingStatus: "FAILED", processingError: error instanceof Error ? error.message.slice(0, 1000) : "Document processing failed" } });
       throw error;
     }

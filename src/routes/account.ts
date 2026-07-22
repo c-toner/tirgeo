@@ -273,6 +273,15 @@ const routes: FastifyPluginAsync = async app => {
     return safeUser(user, canViewPayrollDetails(req.auth.role));
   });
 
+  app.post("/users/:id/deactivate", { preHandler: allow(Role.OWNER, Role.ADMIN) }, async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    if (id === req.auth.userId) return reply.code(400).send({ error: "You cannot deactivate your own account" });
+    const current = await app.prisma.user.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId } });
+    const user = await app.prisma.user.update({ where: { id: current.id }, data: { active: false } });
+    await audit(app, req, "DEACTIVATE", "User", id, { active: false, email: user.email, role: user.role });
+    return reply.code(204).send();
+  });
+
   app.get("/directory", { preHandler: requireSection(AccountSection.WORKER_DIRECTORY) }, async req => {
     const q = z.object({ search: z.string().trim().min(1).max(80).optional() }).parse(req.query);
     return app.prisma.user.findMany({

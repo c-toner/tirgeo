@@ -25,5 +25,12 @@ const routes: FastifyPluginAsync = async (app) => {
     await app.prisma.user.update({ where: { id: user.id }, data: { signaturePinHash: await bcrypt.hash(body.pin, 12), signaturePinSetAt: new Date(), signaturePinFailedAttempts: 0, signaturePinLockedUntil: null } });
     return reply.code(204).send();
   });
+  app.post("/signature-pin/reset", { preHandler: authed, config: { rateLimit: { max: 5, timeWindow: "15 minutes" } } }, async (req, reply) => {
+    const body = z.object({ password: z.string().min(1), pin: z.string().regex(/^\d{4}$/, "PIN must contain exactly four digits") }).parse(req.body);
+    const user = await app.prisma.user.findFirstOrThrow({ where: { id: req.auth.userId, organisationId: req.auth.organisationId, active: true } });
+    if (!(await bcrypt.compare(body.password, user.passwordHash))) return reply.code(403).send({ error: "Password is incorrect" });
+    await app.prisma.user.update({ where: { id: user.id }, data: { signaturePinHash: await bcrypt.hash(body.pin, 12), signaturePinSetAt: new Date(), signaturePinFailedAttempts: 0, signaturePinLockedUntil: null } });
+    return reply.code(204).send();
+  });
 };
 export default routes;

@@ -182,10 +182,8 @@ const routes: FastifyPluginAsync = async app => {
     if (storageError) return storageError;
     const { id } = uuidParam.parse(req.params);
     const asset = await app.prisma.fileAsset.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId, deletedAt: null } });
-    const blob = await import("@vercel/blob");
-    await blob.del(asset.pathname);
     const deleted = await app.prisma.fileAsset.update({ where: { id }, data: { deletedAt: new Date() } });
-    await audit(app, req, "DELETE", "FileAsset", id, { id, pathname: asset.pathname });
+    await audit(app, req, "ARCHIVE", "FileAsset", id, { id, pathname: asset.pathname, deletedAt: deleted.deletedAt });
     return deleted;
   });
 };

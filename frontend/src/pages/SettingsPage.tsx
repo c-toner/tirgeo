@@ -165,6 +165,10 @@ function UserAccessModal({ account, onClose }: { account: AccountRecord; onClose
       }),
     ["/api/v1/account/users"],
   );
+  const deactivateMutation = useMutation(
+    () => api(`/api/v1/account/users/${account.id}/deactivate`, { method: "POST" }),
+    ["/api/v1/account/users"],
+  );
 
   const toggle = (section: AccountSection) => {
     setSections(current => current.includes(section) ? current.filter(item => item !== section) : [...current, section]);
@@ -177,6 +181,15 @@ function UserAccessModal({ account, onClose }: { account: AccountRecord; onClose
       large
       footer={
         <>
+          {account.active && (
+            <button
+              className="btn btn-danger"
+              disabled={deactivateMutation.running}
+              onClick={() => deactivateMutation.run({ onSuccess: () => { toast.push("User deactivated"); invalidate("/api/v1/account/users"); onClose(); } })}
+            >
+              {deactivateMutation.running ? "Deactivating..." : "Deactivate user"}
+            </button>
+          )}
           <button className="btn" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" disabled={mutation.running} onClick={() => mutation.run({ onSuccess: () => { toast.push("User access saved"); invalidate("/api/v1/account/users"); onClose(); } })}>
             {mutation.running ? "Saving..." : "Save access"}
@@ -186,6 +199,8 @@ function UserAccessModal({ account, onClose }: { account: AccountRecord; onClose
     >
       <div className="stack">
         <ErrorAlert error={mutation.error} onDismiss={mutation.reset} />
+        <ErrorAlert error={deactivateMutation.error} onDismiss={deactivateMutation.reset} />
+        {!account.active && <div className="alert alert-warning">This user is deactivated and cannot sign in.</div>}
         <div className="grid grid-2">
           <Field label="Role"><Select value={role} onChange={(value) => setRole(value as Role)} options={ROLES.map(value => ({ value, label: value.replaceAll("_", " ") }))} /></Field>
           <label className="field">
@@ -297,8 +312,12 @@ function UserAdminPanel() {
   const { data, loading, error } = useApiQuery<AccountRecord[]>("/api/v1/account/users");
   const [selected, setSelected] = useState<AccountRecord | null>(null);
   const [creating, setCreating] = useState(false);
+  const [tab, setTab] = useState<"active" | "deactivated">("active");
   if (loading) return <section className="card card-pad"><Loading /></section>;
   if (error) return <ErrorAlert error={error} />;
+  const activeUsers = (data ?? []).filter(account => account.active);
+  const deactivatedUsers = (data ?? []).filter(account => !account.active);
+  const visibleUsers = tab === "active" ? activeUsers : deactivatedUsers;
   return (
     <section className="card card-pad stack">
       <div className="row-between">
@@ -308,12 +327,16 @@ function UserAdminPanel() {
         </div>
         {user && canCreateUsers(user.role) && <button className="btn btn-primary" onClick={() => setCreating(true)}>Create user</button>}
       </div>
-      {!data?.length && <EmptyState title="No users found" />}
-      {data?.map(account => (
+      <div className="seg" style={{ width: "fit-content" }}>
+        <button type="button" className={tab === "active" ? "on-pass" : ""} onClick={() => setTab("active")}>Active ({activeUsers.length})</button>
+        <button type="button" className={tab === "deactivated" ? "on-pass" : ""} onClick={() => setTab("deactivated")}>Deactivated ({deactivatedUsers.length})</button>
+      </div>
+      {!visibleUsers.length && <EmptyState title={tab === "active" ? "No active users found" : "No deactivated users"} />}
+      {visibleUsers.map(account => (
         <div key={account.id} className="list-row">
           <div>
             <b>{account.name}</b>
-            <div className="muted">{account.email} · {account.role.replaceAll("_", " ")} · {account.sections.length} sections</div>
+            <div className="muted">{account.email} · {account.role.replaceAll("_", " ")} · {account.sections.length} sections{!account.active ? " · deactivated" : ""}</div>
           </div>
           <button className="btn" onClick={() => setSelected(account)}>Manage</button>
         </div>
@@ -348,8 +371,14 @@ export function SettingsPage() {
   const { data: me, loading: meLoading, error: meError } = useApiQuery<AccountRecord>("/api/v1/account/me");
   const [pin, setPin] = useState("");
   const [currentPin, setCurrentPin] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetPin, setResetPin] = useState("");
   const pinMutation = useMutation(
     () => api("/api/v1/auth/signature-pin", { method: "PUT", body: { pin, currentPin: currentPin || undefined } }),
+    [],
+  );
+  const resetPinMutation = useMutation(
+    () => api("/api/v1/auth/signature-pin/reset", { method: "POST", body: { password: resetPassword, pin: resetPin } }),
     [],
   );
   const [workerId, setWorkerId] = useState(() => getMyWorkerId() || user?.worker?.id || "");
@@ -376,6 +405,7 @@ export function SettingsPage() {
       <section className="card card-pad stack">
         <div><h2>Signing PIN</h2><p className="muted">Your 4-digit PIN unlocks on-site countersigning on a shared device.</p></div>
         <ErrorAlert error={pinMutation.error} onDismiss={pinMutation.reset} />
+        <ErrorAlert error={resetPinMutation.error} onDismiss={resetPinMutation.reset} />
         <div className="row" style={{ alignItems: "flex-end" }}>
           {!user?.signaturePinRequired && <Field label="Current PIN"><TextInput value={currentPin} onChange={setCurrentPin} type="password" inputMode="numeric" maxLength={4} placeholder="0000" /></Field>}
           <Field label={user?.signaturePinRequired ? "Create PIN" : "New PIN"} required><TextInput value={pin} onChange={setPin} type="password" inputMode="numeric" maxLength={4} placeholder="0000" /></Field>
@@ -383,6 +413,23 @@ export function SettingsPage() {
             {pinMutation.running ? "Saving..." : "Save PIN"}
           </button>
         </div>
+        {!user?.signaturePinRequired && (
+          <div className="card card-pad stack" style={{ boxShadow: "none" }}>
+            <div><h3>Forgot PIN</h3><p className="muted">Confirm your account password to reset your signing PIN.</p></div>
+            <div className="row" style={{ alignItems: "flex-end" }}>
+              <Field label="Account password" required><TextInput value={resetPassword} onChange={setResetPassword} type="password" autoComplete="current-password" /></Field>
+              <Field label="New PIN" required><TextInput value={resetPin} onChange={setResetPin} type="password" inputMode="numeric" maxLength={4} placeholder="0000" /></Field>
+              <button
+                className="btn btn-primary"
+                style={{ marginBottom: 4 }}
+                disabled={resetPinMutation.running || resetPassword.length === 0 || !/^\d{4}$/.test(resetPin)}
+                onClick={() => resetPinMutation.run({ onSuccess: () => { toast.push("Signing PIN reset"); setResetPassword(""); setResetPin(""); } })}
+              >
+                {resetPinMutation.running ? "Resetting..." : "Reset PIN"}
+              </button>
+            </div>
+          </div>
+        )}
       </section>
 
       <section className="card card-pad stack">
