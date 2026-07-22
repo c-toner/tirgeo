@@ -5,10 +5,7 @@ import { allow, requireOrganisationProject } from "../lib/access.js";
 import { audit } from "../lib/audit.js";
 import { summariseProjectCost } from "../lib/commercial-costs.js";
 import { analyseTender, extractTenderText } from "../lib/tender-parser.js";
-import { config } from "../config.js";
 import { createHash, randomUUID } from "node:crypto";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
-import { join } from "node:path";
 
 const managers = allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.OPERATIONS_MANAGER);
 const activeCostStatuses: CostEntryStatus[] = [CostEntryStatus.ACCRUED, CostEntryStatus.INVOICED, CostEntryStatus.APPROVED, CostEntryStatus.PAID];
@@ -91,14 +88,18 @@ const routes: FastifyPluginAsync = async app => {
     const sha256 = createHash("sha256").update(buffer).digest("hex");
     if (await app.prisma.tenderDocument.findUnique({ where: { tenderId_sha256: { tenderId: id, sha256 } } })) return reply.code(409).send({ error: "This document has already been uploaded to the tender" });
     const safeName = upload.filename.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-160) || "tender-document";
-    const storageKey = join(req.auth.organisationId, "tenders", id, `${randomUUID()}-${safeName}`);
-    const absolutePath = join(config.STORAGE_PATH, storageKey); await mkdir(join(config.STORAGE_PATH, req.auth.organisationId, "tenders", id), { recursive: true });
-    await writeFile(absolutePath, buffer, { flag: "wx" });
+    const storageKey = `organisations/${req.auth.organisationId}/tenders/${id}/${randomUUID()}-${safeName}`;
+    const blob = await import("@vercel/blob");
+    await blob.put(storageKey, buffer, {
+      access: "private",
+      contentType: upload.mimetype,
+      addRandomSuffix: false,
+    });
     let document;
     try {
       document = await app.prisma.tenderDocument.create({ data: { tenderId: id, name: upload.filename, mimeType: upload.mimetype, storageKey, sha256, sizeBytes: buffer.length, uploadedById: req.auth.userId, processingStatus: "PROCESSING" } });
     } catch (error: any) {
-      await unlink(absolutePath).catch(() => undefined);
+      await blob.del(storageKey).catch(() => undefined);
       if (error?.code === "P2002") return reply.code(409).send({ error: "This document has already been uploaded to the tender" });
       throw error;
     }
