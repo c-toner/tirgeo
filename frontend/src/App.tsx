@@ -17,6 +17,7 @@ import { TemplatesPage } from "./pages/plant/TemplatesPage.tsx";
 import { CompletedPreStartsPage } from "./pages/plant/CompletedPreStartsPage.tsx";
 import { PreStartDetailPage } from "./pages/plant/PreStartDetailPage.tsx";
 import { DailyReportPage } from "./pages/field/DailyReportPage.tsx";
+import { DocketsPage } from "./pages/field/DocketsPage.tsx";
 import { TimesheetsPage } from "./pages/timesheets/TimesheetsPage.tsx";
 import { PayrollPage } from "./pages/payroll/PayrollPage.tsx";
 import { CommercialPage } from "./pages/commercial/CommercialPage.tsx";
@@ -29,6 +30,7 @@ import type { AccountSection } from "./lib/types.ts";
 const ROUTE_SECTIONS: Array<[string, AccountSection]> = [
   ["/projects", "PROJECTS"],
   ["/field/daily-report", "DAILY_REPORT"],
+  ["/field/dockets", "DOCKETS"],
   ["/hseq/hazards", "HAZARDS"],
   ["/hseq/observations", "OBSERVATIONS"],
   ["/hseq/inspections", "INSPECTIONS"],
@@ -97,6 +99,8 @@ function Routes() {
       return <ChainagePage />;
     case "/field/daily-report":
       return <DailyReportPage />;
+    case "/field/dockets":
+      return <DocketsPage />;
     case "/timesheets":
       return <TimesheetsPage />;
     case "/payroll":

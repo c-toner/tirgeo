@@ -83,5 +83,6 @@ export function canAccessSection(user: AuthUser | null | undefined, section: Acc
   if (section === "COMPLETED_PRE_STARTS") return COMPLETED_PRE_START_ROLES.includes(user.role);
   if (section === "CHAINAGE") return CHAINAGE_ROLES.includes(user.role);
   if (section === "COST_TRACKING") return COMMERCIAL_ROLES.includes(user.role);
+  if (section === "DOCKETS") return user.sections.includes("DOCKETS");
   return false;
 }

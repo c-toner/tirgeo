@@ -27,6 +27,7 @@ const NAV: NavGroup[] = [
       { to: "/", label: "Dashboard", icon: "dashboard", section: "DASHBOARD" },
       { to: "/projects", label: "Projects", icon: "projects", section: "PROJECTS" },
       { to: "/field/daily-report", label: "Daily diary", icon: "clipboard", section: "DAILY_REPORT" },
+      { to: "/field/dockets", label: "Dockets", icon: "file", section: "DOCKETS" },
     ],
   },
   {
@@ -67,7 +68,7 @@ const NAV: NavGroup[] = [
 
 const MOBILE_NAV: NavEntry[] = [
   { to: "/", label: "Home", icon: "dashboard", section: "DASHBOARD" },
-  { to: "/field/daily-report", label: "Diary", icon: "clipboard", section: "DAILY_REPORT" },
+  { to: "/field/dockets", label: "Dockets", icon: "file", section: "DOCKETS" },
   { to: "/hseq/observations", label: "HSEQ", icon: "shield", section: "OBSERVATIONS" },
   { to: "/plant", label: "Plant", icon: "truck", section: "PLANT" },
   { to: "/timesheets", label: "Time", icon: "clock", section: "TIMESHEETS" },

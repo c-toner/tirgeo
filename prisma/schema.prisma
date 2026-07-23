@@ -167,6 +167,7 @@ enum AccountSection {
   DASHBOARD
   PROJECTS
   DAILY_REPORT
+  DOCKETS
   HAZARDS
   OBSERVATIONS
   INSPECTIONS
@@ -215,6 +216,20 @@ enum ForecastConfidence {
   HIGH
 }
 
+enum DocketType {
+  DAYWORKS
+  SCHEDULE_OF_RATES
+}
+
+enum DocketRateBasis {
+  LABOUR
+  PLANT
+  MATERIAL
+  SUBCONTRACTOR
+  MEASURED_WORK
+  OTHER
+}
+
 model Organisation {
   id                     String                  @id @default(uuid())
   name                   String
@@ -240,6 +255,8 @@ model Organisation {
   safetyObservations     SafetyObservation[]
   permitsToWork          PermitToWork[]
   fileAssets             FileAsset[]
+  docketRates            DocketRate[]
+  dockets                Docket[]
 }
 
 model AccountingConnection {
@@ -367,6 +384,7 @@ model User {
   timesheetApprovalRequests  TimesheetApprovalRequest[] @relation("TimesheetApprover")
   notifications              Notification[]
   chainageObservations       ChainageObservation[]       @relation("ChainageObservationCreatedBy")
+  createdDockets             Docket[]                    @relation("DocketCreatedBy")
 
   @@unique([organisationId, email])
 }
@@ -410,6 +428,7 @@ model Worker {
   inductions              Induction[]
   preStarts               PlantPreStart[]
   payrollMappings         PayrollEmployeeMapping[]
+  dockets                 Docket[]
   safetyAssignments       SafetyAssignment[]
   safetyAcknowledgements  SafetyAcknowledgement[]
   ownedCorrectiveActions  CorrectiveAction[]       @relation("CorrectiveActionOwner")
@@ -474,6 +493,8 @@ model Project {
   correctiveActions      CorrectiveAction[]
   fileAssets             FileAsset[]
   productionActuals      ProductionActual[]
+  docketRates            DocketRate[]
+  dockets                Docket[]
   currentWorkers         Worker[]                 @relation("WorkerCurrentProject")
   plantTelemetryReadings PlantTelemetryReading[]
   currentPlant           Plant[]                  @relation("PlantCurrentProject")
@@ -601,6 +622,86 @@ model CostForecast {
 
   @@index([projectId, resolvedAt])
   @@index([costCodeId])
+}
+
+model DocketRate {
+  id             String          @id @default(uuid())
+  organisationId String
+  projectId      String?
+  code           String
+  description    String
+  docketType     DocketType
+  basis          DocketRateBasis @default(MEASURED_WORK)
+  unit           String
+  unitRate       Decimal         @db.Decimal(14, 2)
+  currency       String          @default("AUD")
+  active         Boolean         @default(true)
+  effectiveFrom  DateTime?
+  effectiveTo    DateTime?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  organisation   Organisation    @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  project        Project?        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  docketLines    DocketLine[]
+
+  @@unique([organisationId, projectId, code])
+  @@index([organisationId, docketType, active])
+  @@index([projectId, active])
+}
+
+model Docket {
+  id             String       @id @default(uuid())
+  organisationId String
+  projectId      String
+  workerId       String?
+  createdById    String
+  docketType     DocketType
+  docketDate     DateTime
+  reference      String?
+  location       String?
+  chainageFrom   Decimal?     @db.Decimal(12, 1)
+  chainageTo     Decimal?     @db.Decimal(12, 1)
+  description    String?
+  status         Status       @default(SUBMITTED)
+  submittedAt    DateTime     @default(now())
+  approvedAt     DateTime?
+  approvedById   String?
+  rejectedAt     DateTime?
+  rejectionReason String?
+  notes          String?
+  totalAmount    Decimal      @default(0) @db.Decimal(16, 2)
+  gstAmount      Decimal      @default(0) @db.Decimal(16, 2)
+  currency       String       @default("AUD")
+  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  worker         Worker?      @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  createdBy      User         @relation("DocketCreatedBy", fields: [createdById], references: [id])
+  lines          DocketLine[]
+
+  @@index([organisationId, docketDate])
+  @@index([projectId, docketDate])
+  @@index([workerId, docketDate])
+  @@index([status, docketType])
+}
+
+model DocketLine {
+  id              String      @id @default(uuid())
+  docketId        String
+  rateId          String?
+  code            String
+  description     String
+  basis           DocketRateBasis
+  quantity        Decimal     @db.Decimal(14, 3)
+  unit            String
+  unitRateSnapshot Decimal    @db.Decimal(14, 2)
+  lineAmount      Decimal     @db.Decimal(16, 2)
+  notes           String?
+  docket          Docket      @relation(fields: [docketId], references: [id], onDelete: Cascade)
+  rate            DocketRate? @relation(fields: [rateId], references: [id], onDelete: SetNull)
+
+  @@index([docketId])
+  @@index([rateId])
 }
 
 model Timesheet {

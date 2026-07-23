@@ -46,6 +46,7 @@ const SECTION_LABELS: Record<AccountSection, string> = {
   DASHBOARD: "Dashboard",
   PROJECTS: "Projects",
   DAILY_REPORT: "Daily diary",
+  DOCKETS: "Dockets",
   HAZARDS: "Hazards",
   OBSERVATIONS: "Observations",
   INSPECTIONS: "Inspections",

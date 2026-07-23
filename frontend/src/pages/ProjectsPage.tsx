@@ -301,6 +301,7 @@ function ProjectDetailPanel({ project, canEdit, onResources }: { project: Projec
   const plant = project.currentPlant ?? [];
   const reports = project.dailyReports ?? [];
   const actuals = project.productionActuals ?? [];
+  const dockets = project.dockets ?? [];
   const subProjects = project.subProjects ?? [];
 
   return (
@@ -388,6 +389,25 @@ function ProjectDetailPanel({ project, canEdit, onResources }: { project: Projec
                 <div className="row-between" key={actual.id}>
                   <span className="tiny">{actual.activity}</span>
                   <span className="tiny">{Number(actual.quantity).toLocaleString()} {actual.unit}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div>
+          <b>Dockets</b>
+          {dockets.length === 0 ? (
+            <p className="tiny muted">No dayworks or schedule-of-rates dockets yet.</p>
+          ) : (
+            <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+              {dockets.slice(0, 5).map((docket) => (
+                <div key={docket.id}>
+                  <div className="row-between">
+                    <span className="tiny"><b>{docket.docketType === "SCHEDULE_OF_RATES" ? "SOR" : "Dayworks"}</b> · {formatDate(docket.docketDate)}</span>
+                    <span className="tiny">{canEdit ? formatCurrency(docket.totalAmount) : docket.lines.map((line) => `${line.quantity} ${line.unit}`).join(", ")}</span>
+                  </div>
+                  {docket.description && <div className="tiny muted">{docket.description}</div>}
                 </div>
               ))}
             </div>

@@ -87,6 +87,7 @@ export type AccountSection =
   | "DASHBOARD"
   | "PROJECTS"
   | "DAILY_REPORT"
+  | "DOCKETS"
   | "HAZARDS"
   | "OBSERVATIONS"
   | "INSPECTIONS"
@@ -118,6 +119,8 @@ export type CostEntryType =
   | "OTHER";
 export type CostEntryStatus = "COMMITTED" | "ACCRUED" | "INVOICED" | "APPROVED" | "PAID" | "DISPUTED";
 export type ForecastConfidence = "LOW" | "MEDIUM" | "HIGH";
+export type DocketType = "DAYWORKS" | "SCHEDULE_OF_RATES";
+export type DocketRateBasis = "LABOUR" | "PLANT" | "MATERIAL" | "SUBCONTRACTOR" | "MEASURED_WORK" | "OTHER";
 export type SafetyDocumentType =
   | "SWMS"
   | "JSA"
@@ -168,6 +171,7 @@ export interface Project {
   subProjects?: Array<Pick<Project, "id" | "code" | "name" | "status">>;
   dailyReports?: DailyReport[];
   productionActuals?: ProductionActual[];
+  dockets?: Docket[];
 }
 
 export interface ProjectCostPlan {
@@ -727,4 +731,59 @@ export interface ProductionActual {
   quantity: string | number;
   unit: string;
   capturedAt: string;
+}
+
+export interface DocketRate {
+  id: string;
+  organisationId?: string;
+  projectId?: string | null;
+  code: string;
+  description: string;
+  docketType: DocketType;
+  basis: DocketRateBasis;
+  unit: string;
+  unitRate?: string | number;
+  currency?: string;
+  active?: boolean;
+  effectiveFrom?: string | null;
+  effectiveTo?: string | null;
+  notes?: string | null;
+  project?: Pick<Project, "id" | "code" | "name"> | null;
+}
+
+export interface DocketLine {
+  id: string;
+  docketId?: string;
+  rateId?: string | null;
+  code: string;
+  description: string;
+  basis: DocketRateBasis;
+  quantity: string | number;
+  unit: string;
+  unitRateSnapshot?: string | number;
+  lineAmount?: string | number;
+  notes?: string | null;
+}
+
+export interface Docket {
+  id: string;
+  organisationId?: string;
+  projectId: string;
+  workerId?: string | null;
+  createdById?: string;
+  docketType: DocketType;
+  docketDate: string;
+  reference?: string | null;
+  location?: string | null;
+  chainageFrom?: string | number | null;
+  chainageTo?: string | number | null;
+  description?: string | null;
+  status: Status;
+  submittedAt?: string;
+  totalAmount?: string | number;
+  gstAmount?: string | number;
+  currency?: string;
+  project?: Pick<Project, "id" | "code" | "name">;
+  worker?: Pick<WorkerSummary, "id" | "employeeNumber" | "firstName" | "lastName" | "classification"> | null;
+  lines: DocketLine[];
 }
