@@ -104,6 +104,12 @@ export async function buildApp() {
     const filePath = safeCandidate && await fileExists(candidate) ? candidate : path.join(frontendDistDir, "index.html");
 
     if (!await fileExists(filePath)) return reply.code(404).send({ error: "Frontend build not found", code: "FRONTEND_NOT_BUILT" });
+    reply.header(
+      "Cache-Control",
+      requestPath.startsWith("/assets/")
+        ? "public, max-age=31536000, immutable"
+        : "no-cache",
+    );
     reply.type(mimeTypes[path.extname(filePath)] ?? "application/octet-stream");
     return reply.send(createReadStream(filePath));
   });

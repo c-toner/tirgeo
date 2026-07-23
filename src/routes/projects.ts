@@ -9,35 +9,56 @@ import { canTransitionProject } from "../lib/project.js";
 const geofencePoint = z.object({ latitude: z.number().min(-90).max(90), longitude: z.number().min(-180).max(180) });
 const createProject = z.object({ parentProjectId: z.string().uuid().optional(), code: z.string().min(1).max(30), name: z.string().min(2), clientName: z.string().optional(), description: z.string().optional(), jurisdiction: z.enum(["ACT","NSW","NT","QLD","SA","TAS","VIC","WA"]), address: z.string().optional(), alignment: z.array(civilLocation).optional(), geofence: z.array(geofencePoint).min(3).optional(), contractValue: z.coerce.number().nonnegative().optional(), startDate: z.coerce.date().optional(), endDate: z.coerce.date().optional() }).refine(v => !v.startDate || !v.endDate || v.endDate >= v.startDate, "endDate must be on or after startDate");
 const projectManagers = [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.OPERATIONS_MANAGER];
+const projectDetailInclude = {
+  currentWorkers: {
+    where: { terminationDate: null },
+    select: { id: true, employeeNumber: true, firstName: true, lastName: true, employmentType: true, classification: true, currentProjectId: true, currentProjectAssignedAt: true },
+    orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
+  },
+  currentPlant: {
+    select: { id: true, assetNumber: true, type: true, make: true, model: true, status: true, currentProjectId: true, currentProjectAssignedAt: true },
+    orderBy: { assetNumber: "asc" },
+  },
+  parentProject: { select: { id: true, code: true, name: true } },
+  subProjects: { select: { id: true, code: true, name: true, status: true }, orderBy: { code: "asc" } },
+  dailyReports: {
+    select: { id: true, reportDate: true, status: true, activities: true, submittedById: true },
+    orderBy: { reportDate: "desc" },
+    take: 20,
+  },
+  productionActuals: {
+    select: { id: true, activity: true, quantity: true, unit: true, capturedAt: true },
+    orderBy: { capturedAt: "desc" },
+    take: 20,
+  },
+} satisfies Prisma.ProjectInclude;
 
 function isMissingDocketTable(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021" && String(error.message).includes("Docket");
 }
 
 async function docketSummaries(app: FastifyInstance, organisationId: string, projectIds: string[], take: number) {
-  const empty = new Map(projectIds.map(projectId => [projectId, { dockets: [], docketInvoices: [] }]));
+  const empty = new Map(projectIds.map(projectId => [projectId, { dockets: [] }]));
   if (!projectIds.length) return empty;
   try {
-    const [dockets, invoices] = await Promise.all([
-      app.prisma.docket.findMany({
-        where: { organisationId, projectId: { in: projectIds } },
-        include: { lines: true },
-        orderBy: { docketDate: "desc" },
-        take: Math.max(20, projectIds.length * take),
-      }),
-      app.prisma.docketInvoice.findMany({
-        where: { organisationId, projectId: { in: projectIds } },
-        orderBy: { createdAt: "desc" },
-        take: Math.max(20, projectIds.length * take),
-      }),
-    ]);
+    const dockets = await app.prisma.docket.findMany({
+      where: { organisationId, projectId: { in: projectIds } },
+      select: {
+        id: true,
+        projectId: true,
+        docketType: true,
+        docketDate: true,
+        description: true,
+        totalAmount: true,
+        invoiceId: true,
+        lines: { select: { id: true, quantity: true, unit: true } },
+      },
+      orderBy: { docketDate: "desc" },
+      take: projectIds.length * take,
+    });
     for (const docket of dockets) {
       const bucket = empty.get(docket.projectId);
       if (bucket && bucket.dockets.length < take) bucket.dockets.push(docket as never);
-    }
-    for (const invoice of invoices) {
-      const bucket = empty.get(invoice.projectId);
-      if (bucket && bucket.docketInvoices.length < take) bucket.docketInvoices.push(invoice as never);
     }
     return empty;
   } catch (error) {
@@ -50,21 +71,33 @@ async function docketSummaries(app: FastifyInstance, organisationId: string, pro
 }
 
 const routes: FastifyPluginAsync = async (app) => {
-  app.get("/", { preHandler: authed }, async req => {
-    const projects = await app.prisma.project.findMany({
+  app.get("/options", { preHandler: authed }, req =>
+    app.prisma.project.findMany({
       where: { organisationId: req.auth.organisationId },
-      include: {
-        currentWorkers: { where: { terminationDate: null }, select: { id: true, employeeNumber: true, firstName: true, lastName: true, employmentType: true, classification: true, currentProjectId: true, currentProjectAssignedAt: true } },
-        currentPlant: { select: { id: true, assetNumber: true, type: true, make: true, model: true, status: true, currentProjectId: true, currentProjectAssignedAt: true } },
+      select: { id: true, code: true, name: true, clientName: true, status: true },
+      orderBy: { code: "asc" },
+    }),
+  );
+  app.get("/", { preHandler: authed }, async req => {
+    return app.prisma.project.findMany({
+      where: { organisationId: req.auth.organisationId },
+      select: {
+        id: true,
+        parentProjectId: true,
+        code: true,
+        name: true,
+        clientName: true,
+        description: true,
+        status: true,
+        jurisdiction: true,
+        address: true,
+        contractValue: true,
+        startDate: true,
+        endDate: true,
         parentProject: { select: { id: true, code: true, name: true } },
-        subProjects: { select: { id: true, code: true, name: true, status: true }, orderBy: { code: "asc" } },
-        dailyReports: { select: { id: true, reportDate: true, status: true, activities: true, submittedById: true }, orderBy: { reportDate: "desc" }, take: 5 },
-        productionActuals: { select: { id: true, activity: true, quantity: true, unit: true, capturedAt: true }, orderBy: { capturedAt: "desc" }, take: 5 },
       },
       orderBy: { code: "asc" },
     });
-    const docketsByProject = await docketSummaries(app, req.auth.organisationId, projects.map(project => project.id), 5);
-    return projects.map(project => ({ ...project, ...docketsByProject.get(project.id) }));
   });
   app.post("/", { preHandler: allow(...projectManagers) }, async (req, reply) => {
     const body = createProject.parse(req.body);
@@ -84,14 +117,7 @@ const routes: FastifyPluginAsync = async (app) => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const project = await app.prisma.project.findFirstOrThrow({
       where: { id, organisationId: req.auth.organisationId },
-      include: {
-        currentWorkers: { where: { terminationDate: null }, orderBy: [{ firstName: "asc" }, { lastName: "asc" }] },
-        currentPlant: { orderBy: { assetNumber: "asc" } },
-        parentProject: { select: { id: true, code: true, name: true } },
-        subProjects: { orderBy: { code: "asc" } },
-        dailyReports: { orderBy: { reportDate: "desc" }, take: 20 },
-        productionActuals: { orderBy: { capturedAt: "desc" }, take: 20 },
-      },
+      include: projectDetailInclude,
     });
     return { ...project, ...(await docketSummaries(app, req.auth.organisationId, [id], 20)).get(id) };
   });
@@ -117,7 +143,7 @@ const routes: FastifyPluginAsync = async (app) => {
     await audit(app, req, "RESOURCE_ASSIGNMENT", "Project", id, { workerIds, plantIds, unassignedWorkers: unassignedWorkers.count, assignedWorkers: assignedWorkers.count, unassignedPlant: unassignedPlant.count, assignedPlant: assignedPlant.count });
     const project = await app.prisma.project.findFirstOrThrow({
       where: { id, organisationId: req.auth.organisationId },
-      include: { currentWorkers: true, currentPlant: true, subProjects: true, dailyReports: { orderBy: { reportDate: "desc" }, take: 20 }, productionActuals: { orderBy: { capturedAt: "desc" }, take: 20 } },
+      include: projectDetailInclude,
     });
     return { ...project, ...(await docketSummaries(app, req.auth.organisationId, [id], 20)).get(id) };
   });

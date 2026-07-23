@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Layout } from "../components/Layout.tsx";
 import { EmptyState, Loading, RiskBadge, Select, StatTile, StatusBadge, ErrorAlert, Icon } from "../components/ui.tsx";
 import { useApiQuery } from "../lib/useApi.ts";
-import type { AccountSection, HseqDashboard, Project, Role } from "../lib/types.ts";
+import type { AccountSection, HseqDashboard, ProjectOption, Role } from "../lib/types.ts";
 import { formatDateTime, titleCase } from "../lib/format.ts";
 import { Link } from "../lib/router.tsx";
 import { useAuth } from "../lib/auth.tsx";
@@ -94,7 +94,7 @@ export function DashboardPage() {
     }
     return defaultTilesForRole(user?.role);
   });
-  const { data: projects } = useApiQuery<Project[]>("/api/v1/projects");
+  const { data: projects } = useApiQuery<ProjectOption[]>("/api/v1/projects/options");
   const { data, loading, error } = useApiQuery<HseqDashboard>("/api/v1/safety/dashboard", {
     projectId: projectId || undefined,
   });

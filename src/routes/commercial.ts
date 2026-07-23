@@ -96,13 +96,16 @@ async function loadProjectCostBooks(app: FastifyInstance, organisationId: string
     include: {
       costPlan: true,
       costCodes: { orderBy: { code: "asc" } },
-      costEntries: { orderBy: { incurredAt: "desc" }, include: { costCode: true } },
-      costForecasts: { where: { resolvedAt: null }, orderBy: { createdAt: "desc" }, include: { costCode: true } },
+      costEntries: { orderBy: { incurredAt: "desc" }, include: { costCode: { select: { id: true, code: true } } } },
+      costForecasts: { where: { resolvedAt: null }, orderBy: { createdAt: "desc" }, include: { costCode: { select: { id: true, code: true } } } },
       progressClaims: true,
       variations: true,
       timesheets: {
         where: { status: "APPROVED" },
-        include: { worker: true, entries: { include: { costCode: true } } },
+        select: {
+          worker: { select: { baseHourlyRate: true } },
+          entries: { select: { id: true, costCodeId: true, ordinaryMinutes: true, overtimeMinutes: true } },
+        },
       },
     },
   });
@@ -399,21 +402,21 @@ const routes: FastifyPluginAsync = async app => {
     await requireOrganisationProject(app, req, projectId);
     const [project] = await loadProjectCostBooks(app, req.auth.organisationId, projectId);
     if (!project) throw Object.assign(new Error("Project cost book not found"), { statusCode: 404 });
-    const dailyCostDrafts = await optionalDailyCostRead(app, [], () => app.prisma.dailyProjectCostDraft.findMany({
-      where: { organisationId: req.auth.organisationId, projectId },
-      orderBy: { costDate: "desc" },
-      take: 31,
-      include: {
-        lines: {
-          orderBy: [{ type: "asc" }, { description: "asc" }],
-          include: {
-            worker: { select: { id: true, employeeNumber: true, firstName: true, lastName: true, classification: true } },
-            plant: { select: { id: true, assetNumber: true, type: true, make: true, model: true } },
-          },
-        },
-      },
-    }));
-    const openDrafts = dailyCostDrafts.filter(draft => draft.status !== Status.APPROVED);
+    const draftAttention = await optionalDailyCostRead(app, { draftDays: 0, missingRates: 0, unallocated: 0 }, async () => {
+      const openDraft = {
+        organisationId: req.auth.organisationId,
+        projectId,
+        status: { not: Status.APPROVED },
+      };
+      const [draftDays, missingRates, unallocated] = await Promise.all([
+        app.prisma.dailyProjectCostDraft.count({ where: openDraft }),
+        app.prisma.dailyProjectCostLine.count({
+          where: { draft: openDraft, OR: [{ unitRate: null }, { amount: { lte: 0 } }] },
+        }),
+        app.prisma.dailyProjectCostLine.count({ where: { draft: openDraft, costCodeId: null } }),
+      ]);
+      return { draftDays, missingRates, unallocated };
+    });
     const attachmentIds = [...new Set(project.costEntries.flatMap(entry => entry.attachmentFileAssetId ? [entry.attachmentFileAssetId] : []))];
     const attachments = attachmentIds.length
       ? await app.prisma.fileAsset.findMany({
@@ -423,10 +426,10 @@ const routes: FastifyPluginAsync = async app => {
       : [];
     const attachmentsById = new Map(attachments.map(file => [file.id, file]));
     const attention = {
-      draftDays: openDrafts.length,
-      missingRates: openDrafts.reduce((total, draft) => total + draft.lines.filter(line => line.unitRate === null || toNumber(line.amount) <= 0).length, 0),
+      draftDays: draftAttention.draftDays,
+      missingRates: draftAttention.missingRates,
       unallocated: project.costEntries.filter(entry => activeCostStatuses.includes(entry.status) && !entry.costCodeId).length +
-        openDrafts.reduce((total, draft) => total + draft.lines.filter(line => !line.costCodeId).length, 0),
+        draftAttention.unallocated,
       disputed: project.costEntries.filter(entry => entry.status === CostEntryStatus.DISPUTED).length,
       missingEvidence: project.costEntries.filter(entry => entry.invoiceNumber && !entry.attachmentFileAssetId).length,
     };
@@ -440,7 +443,6 @@ const routes: FastifyPluginAsync = async app => {
         attachment: entry.attachmentFileAssetId ? attachmentsById.get(entry.attachmentFileAssetId) ?? null : null,
       })),
       costForecasts: project.costForecasts,
-      dailyCostDrafts,
       progressClaims: project.progressClaims,
       variations: project.variations,
     };

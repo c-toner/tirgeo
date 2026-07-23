@@ -4,6 +4,9 @@ import { authed } from "../lib/access.js";
 
 const routes: FastifyPluginAsync = async app => {
   app.get("/", { preHandler: authed }, req => app.prisma.notification.findMany({ where: { userId: req.auth.userId }, orderBy: { createdAt: "desc" }, take: 100 }));
+  app.get("/summary", { preHandler: authed }, async req => ({
+    unread: await app.prisma.notification.count({ where: { userId: req.auth.userId, readAt: null } }),
+  }));
   app.post("/:id/read", { preHandler: authed }, async req => {
     const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
     const notification = await app.prisma.notification.findFirstOrThrow({ where: { id, userId: req.auth.userId } });

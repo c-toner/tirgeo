@@ -509,6 +509,7 @@ model Project {
 
   @@unique([organisationId, code])
   @@index([organisationId, parentProjectId])
+  @@index([organisationId, status])
 }
 
 model ChainageAlignment {
@@ -830,6 +831,7 @@ model Timesheet {
   corrections        Timesheet[]               @relation("TimesheetCorrections")
 
   @@index([projectId, workerId, weekEnding])
+  @@index([workerId, weekEnding])
   @@index([parentTimesheetId])
 }
 
@@ -863,6 +865,8 @@ model TimesheetApprovalRequest {
   rejectionReason   String?
   timesheet         Timesheet             @relation(fields: [timesheetId], references: [id])
   approver          User                  @relation("TimesheetApprover", fields: [approverUserId], references: [id])
+
+  @@index([approverUserId, status, requestedAt])
 }
 
 model Notification {
@@ -894,6 +898,8 @@ model TimeEntry {
   notes              String?
   timesheet          Timesheet @relation(fields: [timesheetId], references: [id])
   costCode           CostCode? @relation(fields: [costCodeId], references: [id])
+
+  @@index([timesheetId, workDate])
 }
 
 model PayRun {

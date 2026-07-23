@@ -1,6 +1,3 @@
-import mammoth from "mammoth";
-import ExcelJS from "exceljs";
-
 export type SourceSection = { text: string; page?: number; sheet?: string };
 export type ParsedTender = { sections: SourceSection[]; pageCount?: number };
 
@@ -35,10 +32,12 @@ export async function extractTenderText(buffer: Buffer, mimeType: string, filena
     } finally { await parser.destroy(); }
   }
   if (mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || ext === "docx") {
+    const { default: mammoth } = await import("mammoth");
     const result = await mammoth.extractRawText({ buffer });
     return limitExtractedText({ sections: [{ text: result.value }] });
   }
   if (mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" || ext === "xlsx") {
+    const { default: ExcelJS } = await import("exceljs");
     const workbook = new ExcelJS.Workbook(); await workbook.xlsx.load(buffer as any);
     const sections: SourceSection[] = [];
     workbook.eachSheet(sheet => {

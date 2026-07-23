@@ -181,8 +181,8 @@ export function Layout({ title, children, actions }: { title: string; children: 
   const [theme, toggleTheme] = useTheme();
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
-  const { data: notifications } = useApiQuery<AppNotification[]>("/api/v1/notifications");
-  const unread = notifications?.filter((n) => !n.readAt).length ?? 0;
+  const { data: notificationSummary } = useApiQuery<{ unread: number }>("/api/v1/notifications/summary");
+  const unread = notificationSummary?.unread ?? 0;
 
   useEffect(() => {
     document.title = `${title} · TirGeo`;

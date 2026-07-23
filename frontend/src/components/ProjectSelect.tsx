@@ -1,6 +1,6 @@
 import { Select } from "./ui.tsx";
 import { useApiQuery } from "../lib/useApi.ts";
-import type { Project } from "../lib/types.ts";
+import type { ProjectOption } from "../lib/types.ts";
 
 /** Project dropdown used by every project-scoped form and filter. */
 export function ProjectSelect({
@@ -18,7 +18,7 @@ export function ProjectSelect({
   invalid?: boolean;
   activeOnly?: boolean;
 }) {
-  const { data } = useApiQuery<Project[]>("/api/v1/projects");
+  const { data } = useApiQuery<ProjectOption[]>("/api/v1/projects/options");
   const projects = (data ?? []).filter(
     (project) => !activeOnly || !["CLOSED", "TENDER"].includes(project.status),
   );
@@ -35,8 +35,8 @@ export function ProjectSelect({
 }
 
 export function useProjectName(projectId?: string | null): string {
-  const { data } = useApiQuery<Project[]>("/api/v1/projects");
+  const { data } = useApiQuery<ProjectOption[]>("/api/v1/projects/options");
   if (!projectId) return "—";
   const project = data?.find((p) => p.id === projectId);
-  return project ? project.code : projectId.slice(0, 8) + "…";
+  return project ? project.code : "Project";
 }

@@ -66,7 +66,10 @@ export function useApiQuery<T>(
   useEffect(() => {
     if (!key) return;
     if (cache.has(key)) setState({ data: cache.get(key)!.data as T, loading: false, error: null });
-    else load();
+    else {
+      setState({ data: undefined, loading: true, error: null });
+      load();
+    }
     const onInvalidate = () => {
       if (keyRef.current && !cache.has(keyRef.current)) load();
       else if (keyRef.current) setState({ data: cache.get(keyRef.current)!.data as T, loading: false, error: null });
@@ -96,9 +99,12 @@ export function useMutation<TResult = unknown>(
 ): MutationState<TResult> {
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const runningRef = useRef(false);
 
   const run = useCallback(
     async (options?: { onSuccess?: (result: TResult) => void }) => {
+      if (runningRef.current) return undefined;
+      runningRef.current = true;
       setRunning(true);
       setError(null);
       try {
@@ -110,6 +116,7 @@ export function useMutation<TResult = unknown>(
         setError(err instanceof ApiError ? err : new ApiError(0, String(err)));
         return undefined;
       } finally {
+        runningRef.current = false;
         setRunning(false);
       }
     },

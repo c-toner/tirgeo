@@ -1,31 +1,32 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { AuthProvider, canAccessSection, useAuth } from "./lib/auth.tsx";
 import { RouterProvider, matchPath, usePath } from "./lib/router.tsx";
 import { ToastProvider } from "./components/ui.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
 import { DashboardPage } from "./pages/DashboardPage.tsx";
-import { ProjectsPage } from "./pages/ProjectsPage.tsx";
-import { HazardsPage } from "./pages/hseq/HazardsPage.tsx";
-import { ObservationsPage } from "./pages/hseq/ObservationsPage.tsx";
-import { InspectionsPage } from "./pages/hseq/InspectionsPage.tsx";
-import { PermitsPage } from "./pages/hseq/PermitsPage.tsx";
-import { ActionsPage } from "./pages/hseq/ActionsPage.tsx";
-import { SafetyDocsPage } from "./pages/hseq/SafetyDocsPage.tsx";
-import { MySafetyPage } from "./pages/hseq/MySafetyPage.tsx";
-import { PlantPage } from "./pages/plant/PlantPage.tsx";
-import { TemplatesPage } from "./pages/plant/TemplatesPage.tsx";
-import { CompletedPreStartsPage } from "./pages/plant/CompletedPreStartsPage.tsx";
-import { PreStartDetailPage } from "./pages/plant/PreStartDetailPage.tsx";
-import { DailyReportPage } from "./pages/field/DailyReportPage.tsx";
-import { DocketsPage } from "./pages/field/DocketsPage.tsx";
-import { TimesheetsPage } from "./pages/timesheets/TimesheetsPage.tsx";
-import { PayrollPage } from "./pages/payroll/PayrollPage.tsx";
-import { CommercialPage } from "./pages/commercial/CommercialPage.tsx";
-import { CostTrackingPage } from "./pages/commercial/CostTrackingPage.tsx";
-import { TenderDetailPage } from "./pages/commercial/TenderDetailPage.tsx";
-import { SettingsPage } from "./pages/SettingsPage.tsx";
-import { ChainagePage } from "./pages/ChainagePage.tsx";
 import type { AccountSection } from "./lib/types.ts";
+
+const ProjectsPage = lazy(() => import("./pages/ProjectsPage.tsx").then(module => ({ default: module.ProjectsPage })));
+const HazardsPage = lazy(() => import("./pages/hseq/HazardsPage.tsx").then(module => ({ default: module.HazardsPage })));
+const ObservationsPage = lazy(() => import("./pages/hseq/ObservationsPage.tsx").then(module => ({ default: module.ObservationsPage })));
+const InspectionsPage = lazy(() => import("./pages/hseq/InspectionsPage.tsx").then(module => ({ default: module.InspectionsPage })));
+const PermitsPage = lazy(() => import("./pages/hseq/PermitsPage.tsx").then(module => ({ default: module.PermitsPage })));
+const ActionsPage = lazy(() => import("./pages/hseq/ActionsPage.tsx").then(module => ({ default: module.ActionsPage })));
+const SafetyDocsPage = lazy(() => import("./pages/hseq/SafetyDocsPage.tsx").then(module => ({ default: module.SafetyDocsPage })));
+const MySafetyPage = lazy(() => import("./pages/hseq/MySafetyPage.tsx").then(module => ({ default: module.MySafetyPage })));
+const PlantPage = lazy(() => import("./pages/plant/PlantPage.tsx").then(module => ({ default: module.PlantPage })));
+const TemplatesPage = lazy(() => import("./pages/plant/TemplatesPage.tsx").then(module => ({ default: module.TemplatesPage })));
+const CompletedPreStartsPage = lazy(() => import("./pages/plant/CompletedPreStartsPage.tsx").then(module => ({ default: module.CompletedPreStartsPage })));
+const PreStartDetailPage = lazy(() => import("./pages/plant/PreStartDetailPage.tsx").then(module => ({ default: module.PreStartDetailPage })));
+const DailyReportPage = lazy(() => import("./pages/field/DailyReportPage.tsx").then(module => ({ default: module.DailyReportPage })));
+const DocketsPage = lazy(() => import("./pages/field/DocketsPage.tsx").then(module => ({ default: module.DocketsPage })));
+const TimesheetsPage = lazy(() => import("./pages/timesheets/TimesheetsPage.tsx").then(module => ({ default: module.TimesheetsPage })));
+const PayrollPage = lazy(() => import("./pages/payroll/PayrollPage.tsx").then(module => ({ default: module.PayrollPage })));
+const CommercialPage = lazy(() => import("./pages/commercial/CommercialPage.tsx").then(module => ({ default: module.CommercialPage })));
+const CostTrackingPage = lazy(() => import("./pages/commercial/CostTrackingPage.tsx").then(module => ({ default: module.CostTrackingPage })));
+const TenderDetailPage = lazy(() => import("./pages/commercial/TenderDetailPage.tsx").then(module => ({ default: module.TenderDetailPage })));
+const SettingsPage = lazy(() => import("./pages/SettingsPage.tsx").then(module => ({ default: module.SettingsPage })));
+const ChainagePage = lazy(() => import("./pages/ChainagePage.tsx").then(module => ({ default: module.ChainagePage })));
 
 const ROUTE_SECTIONS: Array<[string, AccountSection]> = [
   ["/projects", "PROJECTS"],
@@ -143,7 +144,9 @@ export default function App() {
       <ToastProvider>
         <AuthProvider>
           <BusyButtonObserver />
-          <Routes />
+          <Suspense fallback={<div className="page-loading"><span className="spinner" /></div>}>
+            <Routes />
+          </Suspense>
         </AuthProvider>
       </ToastProvider>
     </RouterProvider>

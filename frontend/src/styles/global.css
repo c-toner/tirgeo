@@ -1711,6 +1711,13 @@ table.table {
   margin: 26px auto;
 }
 
+.page-loading {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  background: var(--bg);
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .kbd {

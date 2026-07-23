@@ -462,7 +462,7 @@ export function ProjectsPage() {
   const { data, loading, error } = useApiQuery<Project[]>("/api/v1/projects");
   const [creating, setCreating] = useState(false);
   const [statusFor, setStatusFor] = useState<Project | null>(null);
-  const [resourcesFor, setResourcesFor] = useState<Project | null>(null);
+  const [resourcesForId, setResourcesForId] = useState("");
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [filter, setFilter] = useState("");
 
@@ -474,6 +474,14 @@ export function ProjectsPage() {
       (project.clientName ?? "").toLowerCase().includes(filter.toLowerCase()),
   );
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0] ?? null;
+  const selectedDetail = useApiQuery<Project>(
+    selectedProject ? `/api/v1/projects/${selectedProject.id}/resources` : null,
+  );
+  const resourcesDetail = useApiQuery<Project>(
+    resourcesForId ? `/api/v1/projects/${resourcesForId}/resources` : null,
+  );
+  const selectedDetailProject = selectedDetail.data?.id === selectedProject?.id ? selectedDetail.data : undefined;
+  const resourcesDetailProject = resourcesDetail.data?.id === resourcesForId ? resourcesDetail.data : undefined;
 
   return (
     <Layout
@@ -495,7 +503,7 @@ export function ProjectsPage() {
         )}
       </div>
 
-      <ErrorAlert error={error} />
+      <ErrorAlert error={error ?? selectedDetail.error} />
       {loading && !data && <Loading />}
 
       {data && projects.length === 0 && (
@@ -556,7 +564,7 @@ export function ProjectsPage() {
                     {canEdit && (
                       <td onClick={(event) => event.stopPropagation()}>
                         <div className="row" style={{ gap: 6, flexWrap: "nowrap", justifyContent: "flex-end" }}>
-                          <button className="btn btn-ghost btn-sm" onClick={() => setResourcesFor(project)}>
+                          <button className="btn btn-ghost btn-sm" onClick={() => setResourcesForId(project.id)}>
                             Resources
                           </button>
                           <button className="btn btn-ghost btn-sm" onClick={() => setStatusFor(project)}>
@@ -570,15 +578,28 @@ export function ProjectsPage() {
               </tbody>
             </table>
           </div>
-          {selectedProject && (
-            <ProjectDetailPanel project={selectedProject} canEdit={canEdit} onResources={() => setResourcesFor(selectedProject)} />
+          {selectedProject && selectedDetail.loading && !selectedDetailProject && (
+            <aside className="card project-detail-panel card-pad" style={{ alignSelf: "start" }}>
+              <Loading />
+            </aside>
+          )}
+          {selectedProject && selectedDetailProject && (
+            <ProjectDetailPanel project={selectedDetailProject} canEdit={canEdit} onResources={() => setResourcesForId(selectedProject.id)} />
           )}
         </div>
       )}
 
       {creating && <CreateProjectModal onClose={() => setCreating(false)} />}
       {statusFor && <StatusModal project={statusFor} onClose={() => setStatusFor(null)} />}
-      {resourcesFor && <ResourcesModal project={resourcesFor} onClose={() => setResourcesFor(null)} />}
+      {resourcesForId && !resourcesDetailProject && (
+        <Modal title="Project resources" onClose={() => setResourcesForId("")}>
+          <ErrorAlert error={resourcesDetail.error} />
+          {resourcesDetail.loading && <Loading />}
+        </Modal>
+      )}
+      {resourcesForId && resourcesDetailProject && (
+        <ResourcesModal project={resourcesDetailProject} onClose={() => setResourcesForId("")} />
+      )}
     </Layout>
   );
 }

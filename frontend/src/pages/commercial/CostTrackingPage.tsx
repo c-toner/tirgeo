@@ -21,11 +21,11 @@ import type {
   CostEntryStatus,
   CostEntryType,
   CostTrackingProjectDetail,
-  CostTrackingProjectSummary,
   DailyProjectCostDraft,
   DailyProjectCostLine,
   FileAsset,
   ForecastConfidence,
+  ProjectOption,
 } from "../../lib/types.ts";
 import { invalidate, useApiQuery, useMutation } from "../../lib/useApi.ts";
 
@@ -646,7 +646,7 @@ export function CostTrackingPage() {
   const [openingEvidenceId, setOpeningEvidenceId] = useState("");
   const [draftFrom, setDraftFrom] = useState(() => dateInputDaysAgo(30));
   const [draftTo, setDraftTo] = useState(() => todayInput());
-  const summaries = useApiQuery<CostTrackingProjectSummary[]>("/api/v1/commercial/cost-tracking/summary");
+  const projects = useApiQuery<ProjectOption[]>("/api/v1/projects/options");
   const detail = useApiQuery<CostTrackingProjectDetail>(projectId ? `/api/v1/commercial/cost-tracking/projects/${projectId}` : null);
   const draftQuery = useApiQuery<DailyProjectCostDraft[]>(
     projectId ? `/api/v1/commercial/cost-tracking/projects/${projectId}/daily-cost-drafts` : null,
@@ -654,13 +654,12 @@ export function CostTrackingPage() {
   );
 
   useEffect(() => {
-    if (!projectId && summaries.data?.[0]) setProjectId(summaries.data[0].project.id);
-  }, [projectId, summaries.data]);
+    if (!projectId && projects.data?.[0]) setProjectId(projects.data[0].id);
+  }, [projectId, projects.data]);
   useEffect(() => setSelectedDraftIds([]), [projectId, draftFrom, draftTo]);
 
-  const selectedSummary = summaries.data?.find((item) => item.project.id === projectId);
-  const selected = detail.data ?? selectedSummary;
-  const visibleDrafts = draftQuery.data ?? detail.data?.dailyCostDrafts ?? [];
+  const selected = detail.data;
+  const visibleDrafts = draftQuery.data ?? [];
   const selectableDraftIds = visibleDrafts.filter(draft => draft.status !== "APPROVED" && draft.lines.length > 0).map(draft => draft.id);
   const refreshAll = () => invalidate("/api/v1/commercial/cost-tracking");
   const postDraftMutation = useMutation(
@@ -703,11 +702,11 @@ export function CostTrackingPage() {
             </button>
           </div>
         </div>
-        <ErrorAlert error={summaries.error ?? detail.error ?? draftQuery.error} />
+        <ErrorAlert error={projects.error ?? detail.error ?? draftQuery.error} />
       </section>
 
-      {(summaries.loading || detail.loading) && <Loading />}
-      {!summaries.loading && summaries.data?.length === 0 && (
+      {(projects.loading || detail.loading) && <Loading />}
+      {!projects.loading && projects.data?.length === 0 && (
         <EmptyState title="No project costs yet" hint="Create a project first, then return here to manage budgets, actuals, forecasts and margins." />
       )}
 

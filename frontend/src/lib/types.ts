@@ -174,6 +174,8 @@ export interface Project {
   dockets?: Docket[];
 }
 
+export type ProjectOption = Pick<Project, "id" | "code" | "name" | "clientName" | "status">;
+
 export interface ProjectCostPlan {
   id: string;
   projectId: string;
@@ -310,7 +312,6 @@ export interface CostTrackingProjectDetail extends CostTrackingProjectSummary {
   };
   costEntries: CostEntry[];
   costForecasts: CostForecast[];
-  dailyCostDrafts: DailyProjectCostDraft[];
   progressClaims: Array<{ id: string; claimNumber: number; claimedAmount: string | number; certifiedAmount?: string | number | null; status: Status; periodEnd: string }>;
   variations: Array<{ id: string; reference: string; title: string; quotedAmount?: string | number | null; approvedAmount?: string | number | null; status: Status }>;
 }
