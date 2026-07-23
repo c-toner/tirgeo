@@ -23,10 +23,12 @@ async function docketSummaries(app: FastifyInstance, organisationId: string, pro
         where: { organisationId, projectId: { in: projectIds } },
         include: { lines: true },
         orderBy: { docketDate: "desc" },
+        take: Math.max(20, projectIds.length * take),
       }),
       app.prisma.docketInvoice.findMany({
         where: { organisationId, projectId: { in: projectIds } },
         orderBy: { createdAt: "desc" },
+        take: Math.max(20, projectIds.length * take),
       }),
     ]);
     for (const docket of dockets) {

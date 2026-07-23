@@ -64,6 +64,12 @@ async function syncTimesheetDailyCosts(app: FastifyInstance, organisationId: str
   await Promise.all(entries.map(entry => syncTimeEntryDailyCost(app, organisationId, projectId, worker, entry)));
 }
 
+function queueTimesheetDailyCosts(app: FastifyInstance, organisationId: string, projectId: string, workerId: string, entries: Array<{ id: string; workDate: Date; ordinaryMinutes: number; overtimeMinutes: number; costCodeId?: string | null }>) {
+  void syncTimesheetDailyCosts(app, organisationId, projectId, workerId, entries).catch(error => {
+    app.log.warn({ err: error, projectId, workerId }, "Timecard saved but daily cost draft sync failed");
+  });
+}
+
 const routes: FastifyPluginAsync = async app => {
   app.get("/", { preHandler: authed }, async req => {
     const worker = await app.prisma.worker.findFirst({ where: { organisationId: req.auth.organisationId, userId: req.auth.userId }, select: { id: true } });
@@ -116,7 +122,7 @@ const routes: FastifyPluginAsync = async app => {
     if (costCodeIds.length && await app.prisma.costCode.count({ where: { id: { in: costCodeIds }, projectId: project.id } }) !== costCodeIds.length) return reply.code(400).send({ error: "Cost codes must belong to the selected project" });
     const timesheet = await app.prisma.timesheet.create({ data: { projectId: project.id, workerId: body.workerId, weekEnding: body.weekEnding, entries: { create: entries } }, include: { entries: true } });
     await syncWorkerCurrentProject(app, req.auth.organisationId, worker.id, project.id);
-    await syncTimesheetDailyCosts(app, req.auth.organisationId, project.id, worker.id, timesheet.entries);
+    queueTimesheetDailyCosts(app, req.auth.organisationId, project.id, worker.id, timesheet.entries);
     await audit(app, req, "CREATE", "Timesheet", timesheet.id, timesheet); return reply.code(201).send(timesheet);
   });
   app.post("/lodge", { preHandler: authed }, async (req, reply) => {
@@ -134,7 +140,7 @@ const routes: FastifyPluginAsync = async app => {
     const signer = await app.prisma.user.findUniqueOrThrow({ where: { id: req.auth.userId } });
     const created = await app.prisma.timesheet.create({ data: { projectId: project.id, workerId: body.workerId, weekEnding: body.weekEnding, entries: { create: entries } }, include: { entries: true } });
     await syncWorkerCurrentProject(app, req.auth.organisationId, worker.id, project.id);
-    await syncTimesheetDailyCosts(app, req.auth.organisationId, project.id, worker.id, created.entries);
+    queueTimesheetDailyCosts(app, req.auth.organisationId, project.id, worker.id, created.entries);
     const contentHash = timesheetContentHash(created);
     try {
       await app.prisma.timesheetSignature.create({ data: { timesheetId: created.id, signerUserId: req.auth.userId, type: TimesheetSignatureType.EMPLOYEE, signedName: signer.name, signature: body.signature, signatureMethod: body.signatureMethod, timesheetContentHash: contentHash, consentText: "I confirm this timecard is a complete and accurate record of the hours I worked.", ipAddress: req.ip, userAgent: req.headers["user-agent"] } });
@@ -162,7 +168,7 @@ const routes: FastifyPluginAsync = async app => {
     const signer = await app.prisma.user.findUniqueOrThrow({ where: { id: req.auth.userId } });
     const created = await app.prisma.timesheet.create({ data: { projectId: project.id, workerId: body.workerId, weekEnding: body.weekEnding, entries: { create: entries } }, include: { entries: true } });
     await syncWorkerCurrentProject(app, req.auth.organisationId, worker.id, project.id);
-    await syncTimesheetDailyCosts(app, req.auth.organisationId, project.id, worker.id, created.entries);
+    queueTimesheetDailyCosts(app, req.auth.organisationId, project.id, worker.id, created.entries);
     const contentHash = timesheetContentHash(created);
     try {
       await app.prisma.timesheetSignature.create({ data: { timesheetId: created.id, signerUserId: approver.id, type: TimesheetSignatureType.APPROVER, signedName: approver.name, signature: body.approverSignature, signatureMethod: body.approverSignatureMethod, timesheetContentHash: contentHash, consentText: "I have reviewed this timecard and approve the recorded hours.", ipAddress: req.ip, userAgent: req.headers["user-agent"] } });
@@ -192,7 +198,7 @@ const routes: FastifyPluginAsync = async app => {
     }
     const result = await app.prisma.timesheet.update({ where: { id }, data: { status: Status.SUBMITTED, submittedAt: new Date(), contentHash, approvalRequest: approver ? { create: { approverUserId: approver.id, requestedByUserId: req.auth.userId } } : undefined }, include: { signatures: true, approvalRequest: true, entries: true } });
     await syncWorkerCurrentProject(app, req.auth.organisationId, existing.workerId, existing.projectId);
-    await syncTimesheetDailyCosts(app, req.auth.organisationId, existing.projectId, existing.workerId, existing.entries);
+    queueTimesheetDailyCosts(app, req.auth.organisationId, existing.projectId, existing.workerId, existing.entries);
     if (approver) await app.prisma.notification.create({ data: { userId: approver.id, type: "TIMESHEET_APPROVAL_REQUESTED", title: "Timecard awaiting your signature", body: `${signer.name} submitted a timecard for approval.`, entityType: "Timesheet", entityId: id } });
     await app.prisma.auditEvent.create({ data: auditData(req, "SUBMIT", "Timesheet", id, { status: Status.SUBMITTED, contentHash, approverUserId: approver?.id ?? null }) });
     return result;
@@ -215,7 +221,7 @@ const routes: FastifyPluginAsync = async app => {
     await app.prisma.timesheetApprovalRequest.upsert({ where: { timesheetId: id }, update: { status: ApprovalRequestStatus.APPROVED, approverUserId: approver.id, respondedAt: new Date() }, create: { timesheetId: id, approverUserId: approver.id, requestedByUserId: req.auth.userId, status: ApprovalRequestStatus.APPROVED, respondedAt: new Date() } });
     const result = await app.prisma.timesheet.update({ where: { id }, data: { status: Status.APPROVED, submittedAt: new Date(), approvedAt: new Date(), approvedById: approver.id, contentHash }, include: { signatures: true, approvalRequest: true, entries: true } });
     await syncWorkerCurrentProject(app, req.auth.organisationId, existing.workerId, existing.projectId);
-    await syncTimesheetDailyCosts(app, req.auth.organisationId, existing.projectId, existing.workerId, existing.entries);
+    queueTimesheetDailyCosts(app, req.auth.organisationId, existing.projectId, existing.workerId, existing.entries);
     await app.prisma.auditEvent.create({ data: { organisationId: req.auth.organisationId, actorId: approver.id, action: "ONSITE_APPROVE", entityType: "Timesheet", entityId: id, after: { sharedDevice: true, approvedById: approver.id, contentHash }, ipAddress: req.ip } });
     return result;
   });
@@ -294,7 +300,7 @@ const routes: FastifyPluginAsync = async app => {
     if (original.corrections.length) return reply.code(409).send({ error: "A correction already exists", timesheetId: original.corrections[0]!.id });
     const corrected = await app.prisma.timesheet.create({ data: { projectId: original.projectId, workerId: original.workerId, weekEnding: original.weekEnding, revision: original.revision + 1, parentTimesheetId: original.id, correctionReason: original.correctionReason, entries: { create: original.entries.map(e => ({ costCodeId: e.costCodeId, workDate: e.workDate, startedAt: e.startedAt, finishedAt: e.finishedAt, unpaidBreakMinutes: e.unpaidBreakMinutes, ordinaryMinutes: e.ordinaryMinutes, overtimeMinutes: e.overtimeMinutes, allowanceCodes: e.allowanceCodes, notes: e.notes })) } }, include: { entries: true } });
     await syncWorkerCurrentProject(app, req.auth.organisationId, original.workerId, original.projectId);
-    await syncTimesheetDailyCosts(app, req.auth.organisationId, original.projectId, original.workerId, corrected.entries);
+    queueTimesheetDailyCosts(app, req.auth.organisationId, original.projectId, original.workerId, corrected.entries);
     await audit(app, req, "CORRECT", "Timesheet", corrected.id, { parentTimesheetId: original.id, revision: corrected.revision }); return reply.code(201).send(corrected);
   });
 };

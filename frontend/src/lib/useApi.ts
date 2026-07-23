@@ -6,6 +6,7 @@ import { api, ApiError } from "./api.ts";
 
 type CacheEntry = { data: unknown; time: number };
 const cache = new Map<string, CacheEntry>();
+const inFlight = new Map<string, Promise<unknown>>();
 const listeners = new Set<() => void>();
 
 export function invalidate(prefix?: string) {
@@ -41,7 +42,9 @@ export function useApiQuery<T>(
     if (!path || !key) return;
     const thisKey = key;
     setState((s) => ({ ...s, loading: true, error: null }));
-    api<T>(path, { query })
+    const request = (inFlight.get(thisKey) as Promise<T> | undefined) ?? api<T>(path, { query });
+    inFlight.set(thisKey, request);
+    request
       .then((data) => {
         cache.set(thisKey, { data, time: Date.now() });
         if (keyRef.current === thisKey) setState({ data, loading: false, error: null });
@@ -53,6 +56,9 @@ export function useApiQuery<T>(
             loading: false,
             error: error instanceof ApiError ? error : new ApiError(0, String(error)),
           }));
+      })
+      .finally(() => {
+        if (inFlight.get(thisKey) === request) inFlight.delete(thisKey);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);

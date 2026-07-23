@@ -61,6 +61,19 @@ function newEntry(date?: string): EntryDraft {
   };
 }
 
+function isDefaultEntry(entry: EntryDraft): boolean {
+  return entry.start === "07:00" &&
+    entry.finish === "15:30" &&
+    entry.breakMinutes === "30" &&
+    entry.overtimeMinutes === "0" &&
+    !entry.allowances.trim() &&
+    !entry.notes.trim();
+}
+
+function entrySignature(entry: EntryDraft): string {
+  return [entry.workDate, entry.start, entry.finish, entry.breakMinutes, entry.overtimeMinutes].join("|");
+}
+
 function entryMinutes(entry: EntryDraft): { elapsed: number; ordinary: number; overtime: number } {
   if (!entry.workDate || !entry.start || !entry.finish) return { elapsed: 0, ordinary: 0, overtime: 0 };
   const start = new Date(`${entry.workDate}T${entry.start}`);
@@ -129,6 +142,18 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
   const patch = (index: number, changes: Partial<EntryDraft>) =>
     setEntries((list) => list.map((entry, i) => (i === index ? { ...entry, ...changes } : entry)));
 
+  const useQuickDate = (date: string) => {
+    setEntries((list) => {
+      if (!list.length) return [newEntry(date)];
+      if (list.length === 1 && isDefaultEntry(list[0]!)) return [{ ...list[0]!, workDate: date }];
+      if (list.some((entry) => entry.workDate === date)) {
+        toast.push("That day is already on this timecard");
+        return list;
+      }
+      return [...list, newEntry(date)];
+    });
+  };
+
   const totals = useMemo(() => {
     const sums = entries.map(entryMinutes);
     return {
@@ -142,7 +167,7 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
     workerId: workerId.trim(),
     weekEnding: new Date(weekEnding + "T00:00:00.000Z").toISOString(),
     entries: entries
-      .filter((entry) => entry.workDate)
+      .filter((entry, index, list) => entry.workDate && list.findIndex((candidate) => entrySignature(candidate) === entrySignature(entry)) === index)
       .map((entry) => {
         const minutes = entryMinutes(entry);
         return {
@@ -269,8 +294,8 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
           <span className="tiny">Do today, yesterday, or add several days for the week in one go.</span>
         </div>
         <div className="row">
-          <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry(localDate())])}>Today</button>
-          <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry(yesterday())])}>Yesterday</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => useQuickDate(localDate())}>Today</button>
+          <button className="btn btn-ghost btn-sm" onClick={() => useQuickDate(yesterday())}>Yesterday</button>
           <button className="btn btn-ghost btn-sm" onClick={() => setEntries((list) => [...list, newEntry()])}><Icon name="plus" size={13} /> Add day</button>
         </div>
       </div>

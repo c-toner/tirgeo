@@ -1524,6 +1524,10 @@ table.table {
   -webkit-overflow-scrolling: touch;
 }
 
+.modal-body > * {
+  min-width: 0;
+}
+
 .modal-foot {
   display: flex;
   justify-content: flex-end;
@@ -1967,6 +1971,7 @@ table.table {
   }
   .modal {
     width: min(100%, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
     max-height: calc(100dvh - 22px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     border-radius: 12px;
   }
@@ -1994,6 +1999,12 @@ table.table {
 
   .btn-icon {
     min-width: 46px;
+  }
+
+  .input,
+  select.input,
+  textarea.input {
+    font-size: 16px;
   }
 
   .table td {
@@ -2024,6 +2035,10 @@ table.table {
   .summary-list-item { grid-template-columns: 1fr; }
   .modal-head { padding: 14px 16px 10px; }
   .modal-body { padding: 14px 16px; }
+  .modal {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+  }
   .timesheet-shift-grid {
     grid-template-columns: 1fr;
   }

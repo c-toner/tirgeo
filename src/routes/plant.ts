@@ -218,7 +218,11 @@ const routes: FastifyPluginAsync = async app => {
       await tx.auditEvent.create({ data: auditData(req, "PRE_START", "Plant", id, { result: body.result, checklistTemplateId: template.id, checklistVersion: template.version, workerId: body.workerId, projectId, photoIds: submittedPhotoIds }) });
       return created;
     });
-    if (projectId) await syncPreStartDailyCost(app, req.auth.organisationId, projectId, plant, preStart);
+    if (projectId) {
+      void syncPreStartDailyCost(app, req.auth.organisationId, projectId, plant, preStart).catch(error => {
+        app.log.warn({ err: error, projectId, plantId: plant.id }, "Pre-start saved but daily cost draft sync failed");
+      });
+    }
     return reply.code(201).send(preStart);
   });
   app.post("/:id/clearance", { preHandler: allow(...plantClearers) }, async (req, reply) => {

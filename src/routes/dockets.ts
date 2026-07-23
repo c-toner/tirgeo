@@ -18,14 +18,14 @@ function toNumber(value: unknown): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function omitKeys<T extends Record<string, unknown>>(source: T, keys: string[]) {
+  return Object.fromEntries(Object.entries(source).filter(([key]) => !keys.includes(key)));
+}
+
 function scrubDocket<T extends { lines?: Array<Record<string, unknown>>; totalAmount?: unknown; gstAmount?: unknown; currency?: unknown }>(docket: T) {
-  const { totalAmount: _totalAmount, gstAmount: _gstAmount, currency: _currency, ...rest } = docket;
   return {
-    ...rest,
-    lines: docket.lines?.map((line) => {
-      const { unitRateSnapshot: _unitRateSnapshot, lineAmount: _lineAmount, ...lineRest } = line;
-      return lineRest;
-    }) ?? [],
+    ...omitKeys(docket as Record<string, unknown>, ["totalAmount", "gstAmount", "currency"]),
+    lines: docket.lines?.map((line) => omitKeys(line, ["unitRateSnapshot", "lineAmount"])) ?? [],
   };
 }
 

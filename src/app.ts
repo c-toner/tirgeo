@@ -67,6 +67,13 @@ export async function buildApp() {
   await app.register(swagger, { openapi: { info: { title: "TirGeo API", version: "0.1.0", description: "Offline-capable Australian civil construction operations API" } } });
   await app.register(swaggerUi, { routePrefix: "/docs" });
   await app.register(database); await app.register(auth);
+  app.addHook("onResponse", async (req, reply) => {
+    if (!req.url.startsWith("/api/")) return;
+    const elapsedMs = reply.elapsedTime;
+    if (elapsedMs > 1500) {
+      req.log.warn({ method: req.method, url: req.url, statusCode: reply.statusCode, elapsedMs: Math.round(elapsedMs) }, "Slow API request");
+    }
+  });
   app.get("/health", async () => ({ status: "ok", service: "tirgeo-backend" }));
   app.get("/ready", async (_req, reply) => {
     try { await app.prisma.$queryRaw`SELECT 1`; return { status: "ready", service: "tirgeo-backend" }; }
