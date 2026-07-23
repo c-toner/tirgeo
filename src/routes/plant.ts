@@ -4,6 +4,7 @@ import { z } from "zod";
 import { allow, allowSection, authed, requireOrganisationProject } from "../lib/access.js";
 import { audit, auditData } from "../lib/audit.js";
 import { plantTelemetryReading } from "../lib/civil.js";
+import { syncPreStartDailyCost } from "../lib/daily-costs.js";
 import { defectQuestionIds, preStartSections, validatePreStartAnswers } from "../lib/prestart.js";
 
 const plantManagers = [Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, Role.OPERATIONS_MANAGER];
@@ -217,6 +218,7 @@ const routes: FastifyPluginAsync = async app => {
       await tx.auditEvent.create({ data: auditData(req, "PRE_START", "Plant", id, { result: body.result, checklistTemplateId: template.id, checklistVersion: template.version, workerId: body.workerId, projectId, photoIds: submittedPhotoIds }) });
       return created;
     });
+    if (projectId) await syncPreStartDailyCost(app, req.auth.organisationId, projectId, plant, preStart);
     return reply.code(201).send(preStart);
   });
   app.post("/:id/clearance", { preHandler: allow(...plantClearers) }, async (req, reply) => {

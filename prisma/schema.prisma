@@ -258,6 +258,7 @@ model Organisation {
   docketRates            DocketRate[]
   dockets                Docket[]
   docketInvoices         DocketInvoice[]
+  dailyCostDrafts        DailyProjectCostDraft[]
 }
 
 model AccountingConnection {
@@ -431,6 +432,7 @@ model Worker {
   preStarts               PlantPreStart[]
   payrollMappings         PayrollEmployeeMapping[]
   dockets                 Docket[]
+  dailyCostLines          DailyProjectCostLine[]
   safetyAssignments       SafetyAssignment[]
   safetyAcknowledgements  SafetyAcknowledgement[]
   ownedCorrectiveActions  CorrectiveAction[]       @relation("CorrectiveActionOwner")
@@ -498,6 +500,7 @@ model Project {
   docketRates            DocketRate[]
   dockets                Docket[]
   docketInvoices         DocketInvoice[]
+  dailyCostDrafts        DailyProjectCostDraft[]
   currentWorkers         Worker[]                 @relation("WorkerCurrentProject")
   plantTelemetryReadings PlantTelemetryReading[]
   currentPlant           Plant[]                  @relation("PlantCurrentProject")
@@ -625,6 +628,51 @@ model CostForecast {
 
   @@index([projectId, resolvedAt])
   @@index([costCodeId])
+}
+
+model DailyProjectCostDraft {
+  id             String                 @id @default(uuid())
+  organisationId String
+  projectId      String
+  costDate       DateTime
+  status         Status                 @default(DRAFT)
+  notes          String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  organisation   Organisation           @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  project        Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lines          DailyProjectCostLine[]
+
+  @@unique([projectId, costDate])
+  @@index([organisationId, costDate])
+  @@index([projectId, status, costDate])
+}
+
+model DailyProjectCostLine {
+  id          String                @id @default(uuid())
+  draftId     String
+  costCodeId  String?
+  type        CostEntryType
+  source      String                @default("MANUAL")
+  sourceId    String?
+  workerId    String?
+  plantId     String?
+  description String
+  quantity    Decimal               @default(0) @db.Decimal(14, 3)
+  unit        String                @default("hr")
+  unitRate    Decimal?              @db.Decimal(14, 2)
+  amount      Decimal               @default(0) @db.Decimal(16, 2)
+  notes       String?
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+  draft       DailyProjectCostDraft @relation(fields: [draftId], references: [id], onDelete: Cascade)
+  worker      Worker?               @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  plant       Plant?                @relation(fields: [plantId], references: [id], onDelete: SetNull)
+
+  @@unique([draftId, source, sourceId])
+  @@index([draftId, type])
+  @@index([workerId])
+  @@index([plantId])
 }
 
 model DocketRate {
@@ -879,6 +927,7 @@ model Plant {
   organisation      Organisation            @relation(fields: [organisationId], references: [id])
   currentProject    Project?                @relation("PlantCurrentProject", fields: [currentProjectId], references: [id])
   preStarts         PlantPreStart[]
+  dailyCostLines    DailyProjectCostLine[]
   clearances        PlantClearance[]
   telemetryReadings PlantTelemetryReading[]
 

@@ -22,6 +22,8 @@ import type {
   CostEntryType,
   CostTrackingProjectDetail,
   CostTrackingProjectSummary,
+  DailyProjectCostDraft,
+  DailyProjectCostLine,
   ForecastConfidence,
 } from "../../lib/types.ts";
 import { invalidate, useApiQuery, useMutation } from "../../lib/useApi.ts";
@@ -245,6 +247,169 @@ function CostEntryModal({ detail, onClose }: { detail: CostTrackingProjectDetail
   );
 }
 
+type DraftLineForm = {
+  id?: string;
+  costCodeId: string;
+  type: CostEntryType;
+  description: string;
+  quantity: string;
+  unit: string;
+  unitRate: string;
+  amount: string;
+  source: string;
+  workerId?: string | null;
+  plantId?: string | null;
+};
+
+function draftLineForm(line: DailyProjectCostLine): DraftLineForm {
+  return {
+    id: line.id,
+    costCodeId: line.costCodeId ?? "",
+    type: line.type,
+    description: line.description,
+    quantity: String(line.quantity ?? ""),
+    unit: line.unit || "hr",
+    unitRate: line.unitRate === null || line.unitRate === undefined ? "" : String(line.unitRate),
+    amount: String(line.amount ?? ""),
+    source: line.source,
+    workerId: line.workerId,
+    plantId: line.plantId,
+  };
+}
+
+function DailyCostDraftEditor({ detail, draft }: { detail: CostTrackingProjectDetail; draft: DailyProjectCostDraft }) {
+  const toast = useToast();
+  const [rows, setRows] = useState<DraftLineForm[]>(() => draft.lines.map(draftLineForm));
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
+  const costCodeOptions = detail.costCodes.map((code) => ({ value: code.id, label: `${code.code} - ${code.description}` }));
+  useEffect(() => {
+    setRows(draft.lines.map(draftLineForm));
+    setRemovedIds([]);
+  }, [draft]);
+  const updateRow = (index: number, patch: Partial<DraftLineForm>) => setRows((current) => current.map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row));
+  const removeRow = (index: number) => {
+    const row = rows[index];
+    if (row?.id) setRemovedIds((current) => [...current, row.id!]);
+    setRows((current) => current.filter((_, rowIndex) => rowIndex !== index));
+  };
+  const addRow = (type: CostEntryType) => setRows((current) => [
+    ...current,
+    {
+      costCodeId: "",
+      type,
+      description: type === "PLANT" ? "Manual plant" : "Manual labour",
+      quantity: "",
+      unit: "hr",
+      unitRate: "",
+      amount: "",
+      source: "MANUAL",
+    },
+  ]);
+  const total = rows.reduce((sum, row) => sum + (Number(row.amount) || ((Number(row.quantity) || 0) * (Number(row.unitRate) || 0))), 0);
+  const mutation = useMutation(
+    () =>
+      api(`/api/v1/commercial/cost-tracking/daily-cost-drafts/${draft.id}`, {
+        method: "PATCH",
+        body: {
+          lines: [
+            ...rows.map((row) => ({
+              id: row.id,
+              costCodeId: row.costCodeId || null,
+              type: row.type,
+              workerId: row.workerId ?? null,
+              plantId: row.plantId ?? null,
+              description: row.description.trim(),
+              quantity: Number(row.quantity) || 0,
+              unit: row.unit.trim() || "hr",
+              unitRate: row.unitRate ? Number(row.unitRate) : null,
+              amount: row.amount ? Number(row.amount) : undefined,
+            })),
+            ...removedIds.map((id) => ({ id, remove: true, type: "OTHER", description: "Removed", quantity: 0, unit: "hr" })),
+          ],
+        },
+      }),
+    ["/api/v1/commercial/cost-tracking"],
+  );
+  return (
+    <div className="stack" style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+      <div className="row" style={{ justifyContent: "space-between", gap: 12 }}>
+        <div>
+          <b>{formatDate(draft.costDate)}</b>
+          <div className="tiny muted">{rows.length} cost lines · {formatCurrency(total)}</div>
+        </div>
+        <div className="row">
+          <button className="btn btn-ghost btn-sm" onClick={() => addRow("LABOUR")}>
+            <Icon name="plus" size={14} /> Labour
+          </button>
+          <button className="btn btn-ghost btn-sm" onClick={() => addRow("PLANT")}>
+            <Icon name="plus" size={14} /> Plant
+          </button>
+          <button
+            className="btn btn-primary btn-sm"
+            disabled={mutation.running || rows.some((row) => !row.description.trim())}
+            onClick={() => mutation.run({ onSuccess: () => toast.push("Daily cost draft saved") })}
+          >
+            {mutation.running ? "Saving..." : "Save"}
+          </button>
+        </div>
+      </div>
+      <ErrorAlert error={mutation.error} onDismiss={mutation.reset} />
+      <div className="table-wrap">
+        <table className="table">
+          <thead>
+            <tr>
+              <th style={{ minWidth: 170 }}>Person / plant</th>
+              <th>Type</th>
+              <th>Code</th>
+              <th style={{ width: 96 }}>Hours</th>
+              <th style={{ width: 110 }}>Rate</th>
+              <th style={{ width: 120 }}>Amount</th>
+              <th style={{ width: 44 }}></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, index) => (
+              <tr key={row.id ?? `new-${index}`}>
+                <td>
+                  <TextInput value={row.description} onChange={(value) => updateRow(index, { description: value })} />
+                  {row.source !== "MANUAL" && <div className="tiny muted">{titleCase(row.source)}</div>}
+                </td>
+                <td>
+                  <Select value={row.type} onChange={(value) => updateRow(index, { type: value as CostEntryType })} options={[{ value: "LABOUR", label: "Labour" }, { value: "PLANT", label: "Plant" }, { value: "OTHER", label: "Other" }]} />
+                </td>
+                <td>
+                  <Select value={row.costCodeId} onChange={(value) => updateRow(index, { costCodeId: value })} allowEmpty emptyLabel="Unallocated" options={costCodeOptions} />
+                </td>
+                <td>
+                  <TextInput value={row.quantity} onChange={(value) => updateRow(index, { quantity: value })} type="number" min={0} inputMode="decimal" />
+                </td>
+                <td>
+                  <TextInput value={row.unitRate} onChange={(value) => updateRow(index, { unitRate: value, amount: "" })} type="number" min={0} inputMode="decimal" />
+                </td>
+                <td>
+                  <TextInput value={row.amount || String(((Number(row.quantity) || 0) * (Number(row.unitRate) || 0)).toFixed(2))} onChange={(value) => updateRow(index, { amount: value })} type="number" min={0} inputMode="decimal" />
+                </td>
+                <td>
+                  <button className="icon-btn" aria-label="Remove line" onClick={() => removeRow(index)}>
+                    <Icon name="x" size={15} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={7}>
+                  <EmptyState title="No draft lines for this day" hint="Add labour or plant manually, or submit a timecard or pre-start linked to this project." />
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function ForecastModal({ detail, onClose }: { detail: CostTrackingProjectDetail; onClose: () => void }) {
   const toast = useToast();
   const [form, setForm] = useState({
@@ -450,7 +615,24 @@ export function CostTrackingPage() {
           </div>
 
           {detail.data && (
-            <div className="grid grid-2">
+            <>
+              <section className="card">
+                <div className="card-header">
+                  <div>
+                    <h2>Daily draft costs</h2>
+                    <span className="hint">Timecards and pre-starts linked to this project, grouped by work day.</span>
+                  </div>
+                  <StatusBadge status="DRAFT" />
+                </div>
+                <div className="card-pad stack">
+                  {detail.data.dailyCostDrafts.length === 0 ? (
+                    <EmptyState title="No draft daily costs" hint="Submitted timecards and plant pre-starts will appear here for review." />
+                  ) : (
+                    detail.data.dailyCostDrafts.map((draft) => <DailyCostDraftEditor key={draft.id} detail={detail.data!} draft={draft} />)
+                  )}
+                </div>
+              </section>
+              <div className="grid grid-2">
               <section className="card">
                 <div className="card-header">
                   <h2>Recent costs</h2>
@@ -530,7 +712,8 @@ export function CostTrackingPage() {
                   </table>
                 </div>
               </section>
-            </div>
+              </div>
+            </>
           )}
         </>
       )}

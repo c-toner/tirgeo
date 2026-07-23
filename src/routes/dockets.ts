@@ -1,5 +1,5 @@
-import type { FastifyPluginAsync } from "fastify";
-import { AccountSection, DocketRateBasis, DocketType, Role, Status } from "@prisma/client";
+import type { FastifyInstance, FastifyPluginAsync } from "fastify";
+import { AccountSection, DocketRateBasis, DocketType, Prisma, Role, Status } from "@prisma/client";
 import { z } from "zod";
 import { allow, requireOrganisationProject, requireSection } from "../lib/access.js";
 import { audit } from "../lib/audit.js";
@@ -34,12 +34,36 @@ function invoiceNumber(projectCode: string, sequence: number) {
   return `DIN-${safeCode}-${String(sequence + 1).padStart(4, "0")}`;
 }
 
+function missingDocketSchema(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error);
+  return (
+    (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2021" || error.code === "P2022")) ||
+    message.includes("DocketType") ||
+    message.includes("DocketRate") ||
+    message.includes("DocketInvoice") ||
+    message.includes("DocketLine") ||
+    message.includes("Docket")
+  );
+}
+
+async function optionalDocketRead<T>(app: FastifyInstance, fallback: T, query: () => Promise<T>) {
+  try {
+    return await query();
+  } catch (error) {
+    if (missingDocketSchema(error)) {
+      app.log.warn({ err: error }, "Docket schema is missing or in the wrong database schema; returned an empty docket response");
+      return fallback;
+    }
+    throw error;
+  }
+}
+
 const routes: FastifyPluginAsync = async app => {
   app.get("/rates", { preHandler: docketSubmitters }, async req => {
     const query = z.object({ projectId: z.string().uuid().optional(), docketType: docketType.optional() }).parse(req.query);
     if (query.projectId) await requireOrganisationProject(app, req, query.projectId);
     const now = new Date();
-    const rates = await app.prisma.docketRate.findMany({
+    const rates = await optionalDocketRead(app, [], () => app.prisma.docketRate.findMany({
       where: {
         organisationId: req.auth.organisationId,
         active: true,
@@ -52,19 +76,19 @@ const routes: FastifyPluginAsync = async app => {
       },
       orderBy: [{ projectId: "desc" }, { code: "asc" }],
       select: { id: true, projectId: true, code: true, description: true, docketType: true, basis: true, unit: true },
-    });
+    }));
     return rates;
   });
 
   app.get("/my", { preHandler: docketSubmitters }, async req => {
     const worker = await app.prisma.worker.findFirst({ where: { organisationId: req.auth.organisationId, userId: req.auth.userId }, select: { id: true } });
     if (!worker) return [];
-    const dockets = await app.prisma.docket.findMany({
+    const dockets = await optionalDocketRead(app, [], () => app.prisma.docket.findMany({
       where: { organisationId: req.auth.organisationId, workerId: worker.id },
       include: { project: { select: { id: true, code: true, name: true } }, lines: true },
       orderBy: { docketDate: "desc" },
       take: 50,
-    });
+    }));
     return dockets.map(scrubDocket);
   });
 
@@ -147,7 +171,7 @@ const routes: FastifyPluginAsync = async app => {
   app.get("/", { preHandler: commercialManagers }, async req => {
     const query = z.object({ projectId: z.string().uuid().optional(), docketType: docketType.optional(), status: z.nativeEnum(Status).optional(), invoiced: z.coerce.boolean().optional() }).parse(req.query);
     if (query.projectId) await requireOrganisationProject(app, req, query.projectId);
-    return app.prisma.docket.findMany({
+    return optionalDocketRead(app, [], () => app.prisma.docket.findMany({
       where: { organisationId: req.auth.organisationId, projectId: query.projectId, docketType: query.docketType, status: query.status, invoiceId: query.invoiced === undefined ? undefined : query.invoiced ? { not: null } : null },
       include: {
         project: { select: { id: true, code: true, name: true } },
@@ -158,13 +182,14 @@ const routes: FastifyPluginAsync = async app => {
       },
       orderBy: { docketDate: "desc" },
       take: 200,
-    });
+    }));
   });
 
   app.get("/projects/:projectId/invoice-summary", { preHandler: commercialManagers }, async req => {
     const { projectId } = z.object({ projectId: z.string().uuid() }).parse(req.params);
     await requireOrganisationProject(app, req, projectId);
-    const [uninvoiced, invoiced, invoices] = await Promise.all([
+    const summary = await optionalDocketRead(app, null, async () => {
+      const [uninvoiced, invoiced, invoices] = await Promise.all([
       app.prisma.docket.aggregate({
         where: { organisationId: req.auth.organisationId, projectId, invoiceId: null, status: { in: invoiceableStatuses } },
         _count: { _all: true },
@@ -181,14 +206,17 @@ const routes: FastifyPluginAsync = async app => {
         orderBy: { createdAt: "desc" },
         take: 12,
       }),
-    ]);
+      ]);
+      return { uninvoiced, invoiced, invoices };
+    });
+    if (!summary) return { projectId, uninvoicedCount: 0, uninvoicedTotal: 0, invoicedCount: 0, invoicedTotal: 0, invoices: [] };
     return {
       projectId,
-      uninvoicedCount: uninvoiced._count._all,
-      uninvoicedTotal: uninvoiced._sum.totalAmount ?? 0,
-      invoicedCount: invoiced._count._all,
-      invoicedTotal: invoiced._sum.totalAmount ?? 0,
-      invoices,
+      uninvoicedCount: summary.uninvoiced._count._all,
+      uninvoicedTotal: summary.uninvoiced._sum.totalAmount ?? 0,
+      invoicedCount: summary.invoiced._count._all,
+      invoicedTotal: summary.invoiced._sum.totalAmount ?? 0,
+      invoices: summary.invoices,
     };
   });
 
@@ -254,11 +282,11 @@ const routes: FastifyPluginAsync = async app => {
   app.get("/rates/admin", { preHandler: commercialManagers }, async req => {
     const query = z.object({ projectId: z.string().uuid().optional(), docketType: docketType.optional(), active: z.coerce.boolean().optional() }).parse(req.query);
     if (query.projectId) await requireOrganisationProject(app, req, query.projectId);
-    return app.prisma.docketRate.findMany({
+    return optionalDocketRead(app, [], () => app.prisma.docketRate.findMany({
       where: { organisationId: req.auth.organisationId, projectId: query.projectId, docketType: query.docketType, active: query.active },
       include: { project: { select: { id: true, code: true, name: true } } },
       orderBy: [{ active: "desc" }, { code: "asc" }],
-    });
+    }));
   });
 
   app.post("/rates/admin", { preHandler: commercialManagers }, async (req, reply) => {

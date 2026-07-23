@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync } from "fastify";
-import { CostEntryStatus, CostEntryType, ForecastConfidence, Role } from "@prisma/client";
+import { CostEntryStatus, CostEntryType, ForecastConfidence, Prisma, Role, Status } from "@prisma/client";
 import { z } from "zod";
 import { allow, requireOrganisationProject } from "../lib/access.js";
 import { audit } from "../lib/audit.js";
@@ -21,6 +21,27 @@ function toNumber(value: unknown): number {
 async function costCodeBelongsToProject(app: FastifyInstance, projectId: string, costCodeId?: string | null) {
   if (!costCodeId) return;
   await app.prisma.costCode.findFirstOrThrow({ where: { id: costCodeId, projectId } });
+}
+
+function missingDailyCostSchema(error: unknown) {
+  const message = String(error instanceof Error ? error.message : error);
+  return (
+    (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2021" || error.code === "P2022")) ||
+    message.includes("DailyProjectCostDraft") ||
+    message.includes("DailyProjectCostLine")
+  );
+}
+
+async function optionalDailyCostRead<T>(app: FastifyInstance, fallback: T, query: () => Promise<T>) {
+  try {
+    return await query();
+  } catch (error) {
+    if (missingDailyCostSchema(error)) {
+      app.log.warn({ err: error }, "Daily project cost schema is missing; returned an empty daily draft response");
+      return fallback;
+    }
+    throw error;
+  }
 }
 
 async function loadProjectCostBooks(app: FastifyInstance, organisationId: string, projectId?: string) {
@@ -212,14 +233,129 @@ const routes: FastifyPluginAsync = async app => {
     await requireOrganisationProject(app, req, projectId);
     const [project] = await loadProjectCostBooks(app, req.auth.organisationId, projectId);
     if (!project) throw Object.assign(new Error("Project cost book not found"), { statusCode: 404 });
+    const dailyCostDrafts = await optionalDailyCostRead(app, [], () => app.prisma.dailyProjectCostDraft.findMany({
+      where: { organisationId: req.auth.organisationId, projectId },
+      orderBy: { costDate: "desc" },
+      take: 14,
+      include: {
+        lines: {
+          orderBy: [{ type: "asc" }, { description: "asc" }],
+          include: {
+            worker: { select: { id: true, employeeNumber: true, firstName: true, lastName: true, classification: true } },
+            plant: { select: { id: true, assetNumber: true, type: true, make: true, model: true } },
+          },
+        },
+      },
+    }));
     return {
       ...buildCostSummary(project),
       costCodes: project.costCodes,
       costEntries: project.costEntries,
       costForecasts: project.costForecasts,
+      dailyCostDrafts,
       progressClaims: project.progressClaims,
       variations: project.variations,
     };
+  });
+  app.get("/cost-tracking/projects/:projectId/daily-cost-drafts", { preHandler: managers }, async req => {
+    const { projectId } = z.object({ projectId: z.string().uuid() }).parse(req.params);
+    const query = z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional() }).parse(req.query);
+    await requireOrganisationProject(app, req, projectId);
+    return optionalDailyCostRead(app, [], () => app.prisma.dailyProjectCostDraft.findMany({
+      where: { organisationId: req.auth.organisationId, projectId, costDate: { gte: query.from, lte: query.to } },
+      include: {
+        lines: {
+          orderBy: [{ type: "asc" }, { description: "asc" }],
+          include: {
+            worker: { select: { id: true, employeeNumber: true, firstName: true, lastName: true, classification: true } },
+            plant: { select: { id: true, assetNumber: true, type: true, make: true, model: true } },
+          },
+        },
+      },
+      orderBy: { costDate: "desc" },
+    }));
+  });
+  app.post("/cost-tracking/projects/:projectId/daily-cost-drafts", { preHandler: managers }, async (req, reply) => {
+    const { projectId } = z.object({ projectId: z.string().uuid() }).parse(req.params);
+    const body = z.object({ costDate: z.coerce.date() }).parse(req.body);
+    await requireOrganisationProject(app, req, projectId);
+    const costDate = new Date(Date.UTC(body.costDate.getUTCFullYear(), body.costDate.getUTCMonth(), body.costDate.getUTCDate()));
+    const draft = await app.prisma.dailyProjectCostDraft.upsert({
+      where: { projectId_costDate: { projectId, costDate } },
+      create: { organisationId: req.auth.organisationId, projectId, costDate },
+      update: {},
+      include: { lines: true },
+    });
+    return reply.code(201).send(draft);
+  });
+  app.patch("/cost-tracking/daily-cost-drafts/:id", { preHandler: managers }, async (req, reply) => {
+    const { id } = z.object({ id: z.string().uuid() }).parse(req.params);
+    const lineBody = z.object({
+      id: z.string().uuid().optional(),
+      remove: z.boolean().optional(),
+      costCodeId: z.string().uuid().nullable().optional(),
+      type: z.nativeEnum(CostEntryType),
+      workerId: z.string().uuid().nullable().optional(),
+      plantId: z.string().uuid().nullable().optional(),
+      description: z.string().min(1).max(1000),
+      quantity: z.number().nonnegative(),
+      unit: z.string().min(1).max(30).default("hr"),
+      unitRate: z.number().nonnegative().nullable().optional(),
+      amount: z.number().nonnegative().optional(),
+      notes: z.string().max(2000).nullable().optional(),
+    });
+    const body = z.object({ status: z.nativeEnum(Status).optional(), notes: z.string().max(4000).nullable().optional(), lines: z.array(lineBody).max(200) }).parse(req.body);
+    const draft = await app.prisma.dailyProjectCostDraft.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId } });
+    const lineIds = body.lines.flatMap(line => line.id ? [line.id] : []);
+    if (lineIds.length) {
+      const ownedLineCount = await app.prisma.dailyProjectCostLine.count({ where: { id: { in: lineIds }, draftId: draft.id } });
+      if (ownedLineCount !== lineIds.length) return reply.code(400).send({ error: "Every daily cost line must belong to this draft" });
+    }
+    const costCodeIds = [...new Set(body.lines.flatMap(line => line.costCodeId ? [line.costCodeId] : []))];
+    if (costCodeIds.length && await app.prisma.costCode.count({ where: { id: { in: costCodeIds }, projectId: draft.projectId } }) !== costCodeIds.length) return reply.code(400).send({ error: "Cost codes must belong to the selected project" });
+    const workerIds = [...new Set(body.lines.flatMap(line => line.workerId ? [line.workerId] : []))];
+    if (workerIds.length && await app.prisma.worker.count({ where: { id: { in: workerIds }, organisationId: req.auth.organisationId, terminationDate: null } }) !== workerIds.length) return reply.code(400).send({ error: "Workers must belong to your organisation" });
+    const plantIds = [...new Set(body.lines.flatMap(line => line.plantId ? [line.plantId] : []))];
+    if (plantIds.length && await app.prisma.plant.count({ where: { id: { in: plantIds }, organisationId: req.auth.organisationId } }) !== plantIds.length) return reply.code(400).send({ error: "Plant must belong to your organisation" });
+    await app.prisma.$transaction(async tx => {
+      await tx.dailyProjectCostDraft.update({ where: { id: draft.id }, data: { status: body.status, notes: body.notes } });
+      for (const line of body.lines) {
+        if (line.remove && line.id) {
+          await tx.dailyProjectCostLine.delete({ where: { id: line.id } });
+          continue;
+        }
+        if (line.remove) continue;
+        const amount = line.amount ?? Number((line.quantity * (line.unitRate ?? 0)).toFixed(2));
+        const data = {
+          costCodeId: line.costCodeId ?? null,
+          type: line.type,
+          workerId: line.workerId ?? null,
+          plantId: line.plantId ?? null,
+          description: line.description.trim(),
+          quantity: line.quantity,
+          unit: line.unit,
+          unitRate: line.unitRate ?? null,
+          amount,
+          notes: line.notes ?? null,
+        };
+        if (line.id) await tx.dailyProjectCostLine.update({ where: { id: line.id }, data });
+        else await tx.dailyProjectCostLine.create({ data: { ...data, draftId: draft.id, source: "MANUAL", sourceId: randomUUID() } });
+      }
+    });
+    const updated = await app.prisma.dailyProjectCostDraft.findUniqueOrThrow({
+      where: { id: draft.id },
+      include: {
+        lines: {
+          orderBy: [{ type: "asc" }, { description: "asc" }],
+          include: {
+            worker: { select: { id: true, employeeNumber: true, firstName: true, lastName: true, classification: true } },
+            plant: { select: { id: true, assetNumber: true, type: true, make: true, model: true } },
+          },
+        },
+      },
+    });
+    await audit(app, req, "UPDATE", "DailyProjectCostDraft", draft.id, { lineCount: updated.lines.length, status: updated.status });
+    return updated;
   });
   app.put("/cost-tracking/projects/:projectId/plan", { preHandler: managers }, async (req, reply) => {
     const { projectId } = z.object({ projectId: z.string().uuid() }).parse(req.params);

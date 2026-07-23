@@ -252,10 +252,42 @@ export interface CostCode {
   budgetMaterials: string | number;
 }
 
+export interface DailyProjectCostLine {
+  id: string;
+  draftId: string;
+  costCodeId?: string | null;
+  type: CostEntryType;
+  source: string;
+  sourceId?: string | null;
+  workerId?: string | null;
+  plantId?: string | null;
+  description: string;
+  quantity: string | number;
+  unit: string;
+  unitRate?: string | number | null;
+  amount: string | number;
+  notes?: string | null;
+  worker?: Pick<WorkerSummary, "id" | "employeeNumber" | "firstName" | "lastName" | "classification"> | null;
+  plant?: Pick<Plant, "id" | "assetNumber" | "type" | "make" | "model"> | null;
+}
+
+export interface DailyProjectCostDraft {
+  id: string;
+  organisationId?: string;
+  projectId: string;
+  costDate: string;
+  status: Status;
+  notes?: string | null;
+  lines: DailyProjectCostLine[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface CostTrackingProjectDetail extends CostTrackingProjectSummary {
   costCodes: CostCode[];
   costEntries: CostEntry[];
   costForecasts: CostForecast[];
+  dailyCostDrafts: DailyProjectCostDraft[];
   progressClaims: Array<{ id: string; claimNumber: number; claimedAmount: string | number; certifiedAmount?: string | number | null; status: Status; periodEnd: string }>;
   variations: Array<{ id: string; reference: string; title: string; quotedAmount?: string | number | null; approvedAmount?: string | number | null; status: Status }>;
 }
