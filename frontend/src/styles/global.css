@@ -802,9 +802,28 @@ textarea.input { resize: vertical; min-height: 74px; }
 
 .project-board {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
-  gap: 16px;
+  grid-template-columns: minmax(680px, 1fr) minmax(360px, 460px);
+  gap: 24px;
   align-items: start;
+}
+
+.projects-table .table th,
+.projects-table .table td {
+  padding-left: 18px;
+  padding-right: 18px;
+}
+
+.projects-table .table td:first-child,
+.projects-table .table th:first-child {
+  width: 112px;
+}
+
+.compact-table {
+  font-size: 12.5px;
+}
+
+.compact-table td {
+  padding: 8px 0;
 }
 
 table.table {
@@ -1762,6 +1781,7 @@ table.table {
   .sidebar { display: none; }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .project-board { grid-template-columns: minmax(0, 1fr); }
+  .project-detail-panel { display: none; }
   .modal-backdrop {
     place-items: start center;
     overflow-y: auto;

@@ -307,7 +307,7 @@ function ProjectDetailPanel({ project, canEdit, onResources }: { project: Projec
   const subProjects = project.subProjects ?? [];
 
   return (
-    <aside className="card" style={{ alignSelf: "start", position: "sticky", top: 16 }}>
+    <aside className="card project-detail-panel" style={{ alignSelf: "start", position: "sticky", top: 16 }}>
       <div className="card-header">
         <div>
           <h2>{project.code}</h2>
@@ -335,13 +335,17 @@ function ProjectDetailPanel({ project, canEdit, onResources }: { project: Projec
           {workers.length === 0 ? (
             <p className="tiny muted">No workers assigned yet.</p>
           ) : (
-            <div className="stack" style={{ gap: 8, marginTop: 8 }}>
-              {workers.slice(0, 8).map((worker) => (
-                <div className="row-between" key={worker.id}>
-                  <span className="tiny"><b>{worker.firstName} {worker.lastName}</b>{worker.classification ? ` · ${worker.classification}` : ""}</span>
-                  <span className="tiny">{daysOnSite(worker.currentProjectAssignedAt)}</span>
-                </div>
-              ))}
+            <div className="table-wrap" style={{ marginTop: 8 }}>
+              <table className="table compact-table">
+                <tbody>
+                  {workers.slice(0, 8).map((worker) => (
+                    <tr key={worker.id}>
+                      <td><b>{worker.firstName} {worker.lastName}</b><div className="tiny muted">{worker.classification ?? "Worker"}</div></td>
+                      <td className="num tiny">{daysOnSite(worker.currentProjectAssignedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -354,13 +358,17 @@ function ProjectDetailPanel({ project, canEdit, onResources }: { project: Projec
           {plant.length === 0 ? (
             <p className="tiny muted">No plant assigned yet.</p>
           ) : (
-            <div className="stack" style={{ gap: 8, marginTop: 8 }}>
-              {plant.slice(0, 8).map((item) => (
-                <div className="row-between" key={item.id}>
-                  <span className="tiny"><b>{item.assetNumber}</b> · {item.type}</span>
-                  <span className="tiny">{daysOnSite(item.currentProjectAssignedAt)}</span>
-                </div>
-              ))}
+            <div className="table-wrap" style={{ marginTop: 8 }}>
+              <table className="table compact-table">
+                <tbody>
+                  {plant.slice(0, 8).map((item) => (
+                    <tr key={item.id}>
+                      <td><b>{item.assetNumber}</b><div className="tiny muted">{item.type}</div></td>
+                      <td className="num tiny">{daysOnSite(item.currentProjectAssignedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -508,7 +516,7 @@ export function ProjectsPage() {
 
       {projects.length > 0 && (
         <div className="project-board">
-          <div className="card table-wrap">
+          <div className="card table-wrap projects-table">
             <table className="table">
               <thead>
                 <tr>
@@ -518,7 +526,6 @@ export function ProjectsPage() {
                   <th>Jurisdiction</th>
                   <th className="num">Contract value</th>
                   <th>Dates</th>
-                  <th>Resources</th>
                   <th>Status</th>
                   {canEdit && <th />}
                 </tr>
@@ -542,10 +549,6 @@ export function ProjectsPage() {
                     <td className="num">{formatCurrency(project.contractValue)}</td>
                     <td className="tiny">
                       {formatDate(project.startDate)} → {formatDate(project.endDate)}
-                    </td>
-                    <td className="tiny">
-                      <span className="badge no-dot">{project.currentWorkers?.length ?? 0} workers</span>{" "}
-                      <span className="badge no-dot">{project.currentPlant?.length ?? 0} plant</span>
                     </td>
                     <td>
                       <StatusBadge status={project.status} />
