@@ -279,6 +279,7 @@ function WorkMap({
           zoomAt(screen, zoom + (event.deltaY < 0 ? 1 : -1));
         }}
         onPointerDown={(event) => {
+          if (event.target instanceof Element && event.target.closest("button, a")) return;
           event.currentTarget.setPointerCapture(event.pointerId);
           pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
           const values = [...pointers.current.values()];
@@ -324,6 +325,7 @@ function WorkMap({
           }
         }}
         onPointerUp={(event) => {
+          if (!pointers.current.has(event.pointerId)) return;
           const wasTap = pointers.current.size === 1 && !gesture.current?.moved;
           pointers.current.delete(event.pointerId);
           if (wasTap) pickAt(event.clientX, event.clientY);
@@ -378,6 +380,7 @@ function WorkMap({
               className={`work-map-marker ${marker.item.status.toLowerCase()}`}
               key={marker.item.id}
               style={{ left: marker.screen.left, top: marker.screen.top }}
+              aria-label={`View ${marker.item.title} at ${formatChainage(marker.item.chainageM)}`}
               onClick={(event) => {
                 event.stopPropagation();
                 onSelectObservation?.(marker.item.id);
@@ -415,46 +418,46 @@ function WorkMap({
 }
 
 function ChainageObservationDetailModal({ observationId, onClose }: { observationId: string; onClose: () => void }) {
-  const [tab, setTab] = useState<"details" | "images" | "location">("details");
   const detailQuery = useApiQuery<ChainageObservation>(`/api/v1/chainage/observations/${observationId}`);
   const item = detailQuery.data;
   const title = item ? `${formatChainage(item.chainageM)} · ${item.title}` : "Chainage detail";
 
   return (
     <Modal title={title} onClose={onClose} large>
-      <div className="tabs chainage-detail-tabs">
-        <button className={`tab ${tab === "details" ? "active" : ""}`} onClick={() => setTab("details")} type="button">Details</button>
-        <button className={`tab ${tab === "images" ? "active" : ""}`} onClick={() => setTab("images")} type="button">Images ({item?.photos?.length ?? 0})</button>
-        <button className={`tab ${tab === "location" ? "active" : ""}`} onClick={() => setTab("location")} type="button">Location</button>
-      </div>
       <ErrorAlert error={detailQuery.error} />
       {detailQuery.loading && !item ? (
         <Loading />
       ) : item ? (
-        <>
-          {tab === "details" && (
-            <div className="stack">
-              <div className="chainage-detail-hero">
-                <div>
-                  <span className="tiny">Chainage</span>
-                  <b>{formatChainage(item.chainageM)}</b>
-                  <span>{item.alignment.name}{item.alignment.roadRef ? ` · ${item.alignment.roadRef}` : ""}</span>
-                </div>
-                <StatusBadge status={item.status} />
-              </div>
-              <div className="detail-grid chainage-detail-grid">
-                <div><span>Project</span><b>{item.project ? `${item.project.code} · ${item.project.name}` : "Not linked"}</b></div>
-                <div><span>Category</span><b>{titleCase(item.category)}</b></div>
-                <div><span>Side / offset</span><b>{titleCase(item.side)}{item.offsetM ? ` · ${item.offsetM} m` : ""}</b></div>
-                <div><span>Recorded</span><b>{formatDateTime(item.observedAt)}</b></div>
-                <div><span>Recorded by</span><b>{item.createdBy?.name ?? "Unknown"}</b></div>
-                <div><span>GPS accuracy</span><b>{item.gpsAccuracyM ? `${item.gpsAccuracyM} m` : "Not captured"}</b></div>
-              </div>
-              {item.description ? <p className="chainage-detail-description">{item.description}</p> : <p className="muted">No description added.</p>}
+        <div className="stack chainage-report-detail">
+          <div className="chainage-detail-hero">
+            <div>
+              <span className="tiny">Chainage</span>
+              <b>{formatChainage(item.chainageM)}</b>
+              <span>{item.alignment.name}{item.alignment.roadRef ? ` · ${item.alignment.roadRef}` : ""}</span>
             </div>
-          )}
-          {tab === "images" && (
-            item.photos?.length ? (
+            <StatusBadge status={item.status} />
+          </div>
+
+          <div className="detail-grid chainage-detail-grid">
+            <div><span>Project</span><b>{item.project ? `${item.project.code} · ${item.project.name}` : "Not linked"}</b></div>
+            <div><span>Category</span><b>{titleCase(item.category)}</b></div>
+            <div><span>Side / offset</span><b>{titleCase(item.side)}{item.offsetM ? ` · ${item.offsetM} m` : ""}</b></div>
+            <div><span>Recorded</span><b>{formatDateTime(item.observedAt)}</b></div>
+            <div><span>Recorded by</span><b>{item.createdBy?.name ?? "Unknown"}</b></div>
+            <div><span>GPS accuracy</span><b>{item.gpsAccuracyM ? `${item.gpsAccuracyM} m` : "Not captured"}</b></div>
+          </div>
+
+          <section className="chainage-report-section">
+            <h3>Reported detail</h3>
+            {item.description ? <p className="chainage-detail-description">{item.description}</p> : <p className="muted">No description was added to this report.</p>}
+          </section>
+
+          <section className="chainage-report-section">
+            <div className="row-between">
+              <h3>Photos</h3>
+              <span className="badge no-dot">{item.photos?.length ?? 0}</span>
+            </div>
+            {item.photos?.length ? (
               <div className="prestart-photo-grid">
                 {item.photos.map((photo) => (
                   <FileImageLink key={photo.id} file={photo} className="prestart-photo">
@@ -468,30 +471,20 @@ function ChainageObservationDetailModal({ observationId, onClose }: { observatio
                 ))}
               </div>
             ) : (
-              <EmptyState title="No images attached" hint="Photos added in the field will show here." />
-            )
-          )}
-          {tab === "location" && (
+              <p className="muted">No photos were attached to this report.</p>
+            )}
+          </section>
+
+          <section className="chainage-report-section">
+            <h3>Location</h3>
             <div className="chainage-location-card">
-              <div>
-                <span>Road</span>
-                <b>{item.alignment.name}</b>
-              </div>
-              <div>
-                <span>Chainage</span>
-                <b>{formatChainage(item.chainageM)}</b>
-              </div>
-              <div>
-                <span>Latitude</span>
-                <b>{item.latitude ?? "Not captured"}</b>
-              </div>
-              <div>
-                <span>Longitude</span>
-                <b>{item.longitude ?? "Not captured"}</b>
-              </div>
+              <div><span>Road</span><b>{item.alignment.name}</b></div>
+              <div><span>Chainage</span><b>{formatChainage(item.chainageM)}</b></div>
+              <div><span>Latitude</span><b>{item.latitude ?? "Not captured"}</b></div>
+              <div><span>Longitude</span><b>{item.longitude ?? "Not captured"}</b></div>
             </div>
-          )}
-        </>
+          </section>
+        </div>
       ) : null}
     </Modal>
   );

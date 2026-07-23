@@ -1297,10 +1297,6 @@ table.table {
   gap: 3px;
 }
 
-.chainage-detail-tabs {
-  margin-bottom: 14px;
-}
-
 .chainage-detail-hero {
   align-items: flex-start;
   background: var(--surface-2);
@@ -1345,6 +1341,21 @@ table.table {
   border-left: 3px solid var(--primary);
   margin: 0;
   padding: 4px 0 4px 12px;
+  white-space: pre-wrap;
+}
+
+.chainage-report-detail {
+  gap: 20px;
+}
+
+.chainage-report-section {
+  display: grid;
+  gap: 10px;
+}
+
+.chainage-report-section h3 {
+  font-size: 15px;
+  margin: 0;
 }
 
 .chainage-location-card {
