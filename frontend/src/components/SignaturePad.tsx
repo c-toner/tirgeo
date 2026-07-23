@@ -16,11 +16,13 @@ export function SignaturePad({
   signedName,
   onNameChange,
   nameLabel = "Full name",
+  showNameField = true,
 }: {
   onChange: (value: SignatureValue | null) => void;
   signedName: string;
   onNameChange: (name: string) => void;
   nameLabel?: string;
+  showNameField?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawing = useRef(false);
@@ -93,9 +95,11 @@ export function SignaturePad({
 
   return (
     <div className="stack">
-      <Field label={nameLabel} required>
-        <TextInput value={signedName} onChange={onNameChange} placeholder="As it should appear on the record" />
-      </Field>
+      {showNameField && (
+        <Field label={nameLabel} required>
+          <TextInput value={signedName} onChange={onNameChange} placeholder="As it should appear on the record" />
+        </Field>
+      )}
       <div className="row-between">
         <label style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink-2)" }}>
           Signature <span className="req" style={{ color: "var(--critical)" }}>*</span>

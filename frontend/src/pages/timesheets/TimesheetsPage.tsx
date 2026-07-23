@@ -114,7 +114,6 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
   const [pinError, setPinError] = useState<string | null>(null);
   const [verifyingPin, setVerifyingPin] = useState(false);
   const [onsiteVerified, setOnsiteVerified] = useState(false);
-  const [approverName, setApproverName] = useState("");
   const [approverSignature, setApproverSignature] = useState<SignatureValue | null>(null);
   const [signedName, setSignedName] = useState(user?.name ?? "");
   const [signature, setSignature] = useState<SignatureValue | null>(null);
@@ -176,7 +175,7 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
           ...createPayload(),
           approverUserId,
           pin,
-          approverSignedName: approverName.trim(),
+          approverSignedName: approvers?.find((approver) => approver.id === approverUserId)?.name ?? "Supervisor",
           approverSignature: approverSignature!.signature,
           approverSignatureMethod: approverSignature!.signatureMethod,
           approverConsent: true,
@@ -191,12 +190,17 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
 
   const error = lodgeMutation.error || onsiteMutation.error;
   const issues = ((lodgeMutation.error ?? onsiteMutation.error)?.body as { issues?: Array<{ message?: string; entryId?: string }> } | undefined)?.issues;
+  const selectedApprover = approvers?.find((approver) => approver.id === approverUserId);
+  const selectedApproverName = selectedApprover?.name ?? "";
   const supervisorHandled = Boolean((approvalMode === "request" && approverUserId) || (approvalMode === "onsite" && onsiteVerified));
   const canSubmit = Boolean(projectId && workerId.trim() && weekEnding && entries.some((entry) => entry.workDate) && supervisorHandled && signedName.trim().length >= 2 && signature && consent);
 
-  const resetSupervisorVerification = () => setOnsiteVerified(false);
+  const resetSupervisorVerification = () => {
+    setOnsiteVerified(false);
+    onsiteMutation.reset();
+  };
   const verifyOnsiteSupervisor = async () => {
-    if (!approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2) return;
+    if (!approverUserId || !/^\d{4}$/.test(pin) || !approverSignature) return;
     setVerifyingPin(true);
     setPinError(null);
     resetSupervisorVerification();
@@ -275,7 +279,7 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
         const minutes = entryMinutes(entry);
         return (
           <div key={entry.id} className="card card-pad stack" style={{ boxShadow: "none", gap: 10 }}>
-            <div className="row" style={{ alignItems: "flex-end" }}>
+            <div className="timesheet-shift-grid">
               <Field label="Work date" required><TextInput value={entry.workDate} onChange={(value) => patch(index, { workDate: value })} type="date" /></Field>
               <Field label="Start"><TextInput value={entry.start} onChange={(value) => patch(index, { start: value })} type="time" /></Field>
               <Field label="Finish"><TextInput value={entry.finish} onChange={(value) => patch(index, { finish: value })} type="time" /></Field>
@@ -313,8 +317,10 @@ function DraftTimesheetModal({ onClose, onCreated }: { onClose: () => void; onCr
             <Field label="Supervisor PIN" required hint="The supervisor enters their 4-digit signing PIN." error={pinError ?? undefined}>
               <TextInput value={pin} onChange={(value) => { setPin(value); setPinError(null); resetSupervisorVerification(); }} type="password" inputMode="numeric" maxLength={4} placeholder="0000" invalid={!!pinError} />
             </Field>
-            <SignaturePad signedName={approverName} onNameChange={(value) => { setApproverName(value); resetSupervisorVerification(); }} onChange={(value) => { setApproverSignature(value); resetSupervisorVerification(); }} nameLabel="Supervisor name" />
-            <button className="btn btn-primary" type="button" disabled={verifyingPin || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2} onClick={verifyOnsiteSupervisor}>
+            {selectedApproverName && <div className="tiny">Signing as <b>{selectedApproverName}</b></div>}
+            {pinError && <div className="alert alert-critical">Incorrect supervisor PIN. Check the 4-digit PIN and try again.</div>}
+            <SignaturePad signedName={selectedApproverName} onNameChange={() => undefined} onChange={(value) => { setApproverSignature(value); resetSupervisorVerification(); }} showNameField={false} />
+            <button className="btn btn-primary" type="button" disabled={verifyingPin || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature} onClick={verifyOnsiteSupervisor}>
               {verifyingPin ? "Checking PIN..." : onsiteVerified ? "Supervisor verified" : "Verify supervisor signature"}
             </button>
           </>
@@ -345,7 +351,6 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
   const [pinError, setPinError] = useState<string | null>(null);
   const [verifyingPin, setVerifyingPin] = useState(false);
   const [onsiteVerified, setOnsiteVerified] = useState(false);
-  const [approverName, setApproverName] = useState("");
   const [approverSignature, setApproverSignature] = useState<SignatureValue | null>(null);
   const [signedName, setSignedName] = useState(user?.name ?? "");
   const [signature, setSignature] = useState<SignatureValue | null>(null);
@@ -372,7 +377,7 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
         body: {
           approverUserId,
           pin,
-          approverSignedName: approverName.trim(),
+          approverSignedName: approvers?.find((approver) => approver.id === approverUserId)?.name ?? "Supervisor",
           approverSignature: approverSignature!.signature,
           approverSignatureMethod: approverSignature!.signatureMethod,
           approverConsent: true,
@@ -386,10 +391,15 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
   );
 
   const supervisorHandled = Boolean((approvalMode === "request" && approverUserId) || (approvalMode === "onsite" && onsiteVerified));
+  const selectedApprover = approvers?.find((approver) => approver.id === approverUserId);
+  const selectedApproverName = selectedApprover?.name ?? "";
   const ready = Boolean(supervisorHandled && signature && signedName.trim().length >= 2 && consent);
-  const resetSupervisorVerification = () => setOnsiteVerified(false);
+  const resetSupervisorVerification = () => {
+    setOnsiteVerified(false);
+    onsiteMutation.reset();
+  };
   const verifyOnsiteSupervisor = async () => {
-    if (!approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2) return;
+    if (!approverUserId || !/^\d{4}$/.test(pin) || !approverSignature) return;
     setVerifyingPin(true);
     setPinError(null);
     resetSupervisorVerification();
@@ -448,8 +458,10 @@ function SubmitModal({ timesheetId, onClose }: { timesheetId: string; onClose: (
             <Field label="Supervisor PIN" required hint="The supervisor enters their 4-digit signing PIN." error={pinError ?? undefined}>
               <TextInput value={pin} onChange={(value) => { setPin(value); setPinError(null); resetSupervisorVerification(); }} type="password" inputMode="numeric" maxLength={4} placeholder="0000" invalid={!!pinError} />
             </Field>
-            <SignaturePad signedName={approverName} onNameChange={(value) => { setApproverName(value); resetSupervisorVerification(); }} onChange={(value) => { setApproverSignature(value); resetSupervisorVerification(); }} nameLabel="Supervisor name" />
-            <button className="btn btn-primary" type="button" disabled={verifyingPin || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature || approverName.trim().length < 2} onClick={verifyOnsiteSupervisor}>
+            {selectedApproverName && <div className="tiny">Signing as <b>{selectedApproverName}</b></div>}
+            {pinError && <div className="alert alert-critical">Incorrect supervisor PIN. Check the 4-digit PIN and try again.</div>}
+            <SignaturePad signedName={selectedApproverName} onNameChange={() => undefined} onChange={(value) => { setApproverSignature(value); resetSupervisorVerification(); }} showNameField={false} />
+            <button className="btn btn-primary" type="button" disabled={verifyingPin || !approverUserId || !/^\d{4}$/.test(pin) || !approverSignature} onClick={verifyOnsiteSupervisor}>
               {verifyingPin ? "Checking PIN..." : onsiteVerified ? "Supervisor verified" : "Verify supervisor signature"}
             </button>
           </>
