@@ -19,7 +19,9 @@ const routes: FastifyPluginAsync = async (app) => {
       subProjects: { select: { id: true, code: true, name: true, status: true }, orderBy: { code: "asc" } },
       dailyReports: { select: { id: true, reportDate: true, status: true, activities: true, submittedById: true }, orderBy: { reportDate: "desc" }, take: 5 },
       productionActuals: { select: { id: true, activity: true, quantity: true, unit: true, capturedAt: true }, orderBy: { capturedAt: "desc" }, take: 5 },
-      dockets: { select: { id: true, docketType: true, docketDate: true, status: true, totalAmount: true, currency: true, description: true, lines: { select: { id: true, code: true, description: true, quantity: true, unit: true, lineAmount: true } } }, orderBy: { docketDate: "desc" }, take: 5 },
+      dockets: { select: { id: true, docketType: true, docketDate: true, status: true, invoiceId: true, totalAmount: true, currency: true, description: true, lines: { select: { id: true, code: true, description: true, quantity: true, unit: true, lineAmount: true } } }, orderBy: { docketDate: "desc" }, take: 5 },
+      docketInvoices: { select: { id: true, invoiceNumber: true, status: true, totalAmount: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 5 },
+      _count: { select: { dockets: true, docketInvoices: true } },
     },
     orderBy: { code: "asc" },
   }));
@@ -49,6 +51,7 @@ const routes: FastifyPluginAsync = async (app) => {
         dailyReports: { orderBy: { reportDate: "desc" }, take: 20 },
         productionActuals: { orderBy: { capturedAt: "desc" }, take: 20 },
         dockets: { include: { lines: true, worker: { select: { id: true, employeeNumber: true, firstName: true, lastName: true } } }, orderBy: { docketDate: "desc" }, take: 20 },
+        docketInvoices: { include: { _count: { select: { dockets: true, items: true } } }, orderBy: { createdAt: "desc" }, take: 20 },
       },
     });
   });
@@ -74,7 +77,7 @@ const routes: FastifyPluginAsync = async (app) => {
     await audit(app, req, "RESOURCE_ASSIGNMENT", "Project", id, { workerIds, plantIds, unassignedWorkers: unassignedWorkers.count, assignedWorkers: assignedWorkers.count, unassignedPlant: unassignedPlant.count, assignedPlant: assignedPlant.count });
     return app.prisma.project.findFirstOrThrow({
       where: { id, organisationId: req.auth.organisationId },
-      include: { currentWorkers: true, currentPlant: true, subProjects: true, dailyReports: { orderBy: { reportDate: "desc" }, take: 20 }, productionActuals: { orderBy: { capturedAt: "desc" }, take: 20 }, dockets: { include: { lines: true }, orderBy: { docketDate: "desc" }, take: 20 } },
+      include: { currentWorkers: true, currentPlant: true, subProjects: true, dailyReports: { orderBy: { reportDate: "desc" }, take: 20 }, productionActuals: { orderBy: { capturedAt: "desc" }, take: 20 }, dockets: { include: { lines: true }, orderBy: { docketDate: "desc" }, take: 20 }, docketInvoices: { orderBy: { createdAt: "desc" }, take: 20 } },
     });
   });
 };

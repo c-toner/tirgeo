@@ -783,7 +783,36 @@ export interface Docket {
   totalAmount?: string | number;
   gstAmount?: string | number;
   currency?: string;
+  invoiceId?: string | null;
+  invoice?: Pick<DocketInvoice, "id" | "invoiceNumber" | "status"> | null;
   project?: Pick<Project, "id" | "code" | "name">;
   worker?: Pick<WorkerSummary, "id" | "employeeNumber" | "firstName" | "lastName" | "classification"> | null;
   lines: DocketLine[];
+}
+
+export interface DocketInvoice {
+  id: string;
+  organisationId?: string;
+  projectId: string;
+  invoiceNumber: string;
+  periodStart: string;
+  periodEnd: string;
+  status: Status;
+  subtotalAmount: string | number;
+  gstAmount: string | number;
+  totalAmount: string | number;
+  currency: string;
+  notes?: string | null;
+  createdAt: string;
+  issuedAt?: string | null;
+  _count?: { dockets: number; items: number };
+}
+
+export interface DocketInvoiceSummary {
+  projectId: string;
+  uninvoicedCount: number;
+  uninvoicedTotal: string | number;
+  invoicedCount: number;
+  invoicedTotal: string | number;
+  invoices: DocketInvoice[];
 }

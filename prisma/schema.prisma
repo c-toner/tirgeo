@@ -257,6 +257,7 @@ model Organisation {
   fileAssets             FileAsset[]
   docketRates            DocketRate[]
   dockets                Docket[]
+  docketInvoices         DocketInvoice[]
 }
 
 model AccountingConnection {
@@ -385,6 +386,7 @@ model User {
   notifications              Notification[]
   chainageObservations       ChainageObservation[]       @relation("ChainageObservationCreatedBy")
   createdDockets             Docket[]                    @relation("DocketCreatedBy")
+  createdDocketInvoices      DocketInvoice[]             @relation("DocketInvoiceCreatedBy")
 
   @@unique([organisationId, email])
 }
@@ -495,6 +497,7 @@ model Project {
   productionActuals      ProductionActual[]
   docketRates            DocketRate[]
   dockets                Docket[]
+  docketInvoices         DocketInvoice[]
   currentWorkers         Worker[]                 @relation("WorkerCurrentProject")
   plantTelemetryReadings PlantTelemetryReading[]
   currentPlant           Plant[]                  @relation("PlantCurrentProject")
@@ -667,6 +670,7 @@ model Docket {
   submittedAt    DateTime     @default(now())
   approvedAt     DateTime?
   approvedById   String?
+  invoiceId      String?
   rejectedAt     DateTime?
   rejectionReason String?
   notes          String?
@@ -677,12 +681,58 @@ model Docket {
   project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
   worker         Worker?      @relation(fields: [workerId], references: [id], onDelete: SetNull)
   createdBy      User         @relation("DocketCreatedBy", fields: [createdById], references: [id])
+  invoice        DocketInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
   lines          DocketLine[]
 
   @@index([organisationId, docketDate])
   @@index([projectId, docketDate])
+  @@index([projectId, invoiceId])
   @@index([workerId, docketDate])
   @@index([status, docketType])
+}
+
+model DocketInvoice {
+  id             String              @id @default(uuid())
+  organisationId String
+  projectId      String
+  invoiceNumber  String
+  periodStart    DateTime
+  periodEnd      DateTime
+  status         Status              @default(DRAFT)
+  subtotalAmount Decimal             @default(0) @db.Decimal(16, 2)
+  gstAmount      Decimal             @default(0) @db.Decimal(16, 2)
+  totalAmount    Decimal             @default(0) @db.Decimal(16, 2)
+  currency       String              @default("AUD")
+  notes          String?
+  createdById    String
+  createdAt      DateTime            @default(now())
+  issuedAt       DateTime?
+  organisation   Organisation        @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  project        Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy      User                @relation("DocketInvoiceCreatedBy", fields: [createdById], references: [id])
+  dockets        Docket[]
+  items          DocketInvoiceItem[]
+
+  @@unique([organisationId, invoiceNumber])
+  @@index([projectId, createdAt])
+  @@index([organisationId, status, createdAt])
+}
+
+model DocketInvoiceItem {
+  id              String        @id @default(uuid())
+  invoiceId       String
+  docketId        String
+  docketLineId    String?
+  code            String
+  description     String
+  quantity        Decimal       @db.Decimal(14, 3)
+  unit            String
+  unitRate        Decimal       @db.Decimal(14, 2)
+  amount          Decimal       @db.Decimal(16, 2)
+  invoice         DocketInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@index([docketId])
 }
 
 model DocketLine {

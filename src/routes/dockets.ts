@@ -8,6 +8,7 @@ const commercialManagers = allow(Role.OWNER, Role.ADMIN, Role.PROJECT_MANAGER, R
 const docketSubmitters = requireSection(AccountSection.DOCKETS);
 const rateBasis = z.nativeEnum(DocketRateBasis);
 const docketType = z.nativeEnum(DocketType);
+const invoiceableStatuses: Status[] = [Status.SUBMITTED, Status.APPROVED];
 
 function toNumber(value: unknown): number {
   if (value === null || value === undefined || value === "") return 0;
@@ -26,6 +27,11 @@ function scrubDocket<T extends { lines?: Array<Record<string, unknown>>; totalAm
       return lineRest;
     }) ?? [],
   };
+}
+
+function invoiceNumber(projectCode: string, sequence: number) {
+  const safeCode = projectCode.replace(/[^a-zA-Z0-9-]/g, "").slice(0, 24) || "PROJECT";
+  return `DIN-${safeCode}-${String(sequence + 1).padStart(4, "0")}`;
 }
 
 const routes: FastifyPluginAsync = async app => {
@@ -139,19 +145,110 @@ const routes: FastifyPluginAsync = async app => {
   });
 
   app.get("/", { preHandler: commercialManagers }, async req => {
-    const query = z.object({ projectId: z.string().uuid().optional(), docketType: docketType.optional(), status: z.nativeEnum(Status).optional() }).parse(req.query);
+    const query = z.object({ projectId: z.string().uuid().optional(), docketType: docketType.optional(), status: z.nativeEnum(Status).optional(), invoiced: z.coerce.boolean().optional() }).parse(req.query);
     if (query.projectId) await requireOrganisationProject(app, req, query.projectId);
     return app.prisma.docket.findMany({
-      where: { organisationId: req.auth.organisationId, projectId: query.projectId, docketType: query.docketType, status: query.status },
+      where: { organisationId: req.auth.organisationId, projectId: query.projectId, docketType: query.docketType, status: query.status, invoiceId: query.invoiced === undefined ? undefined : query.invoiced ? { not: null } : null },
       include: {
         project: { select: { id: true, code: true, name: true } },
         worker: { select: { id: true, employeeNumber: true, firstName: true, lastName: true, classification: true } },
         createdBy: { select: { id: true, name: true, role: true } },
+        invoice: { select: { id: true, invoiceNumber: true, status: true } },
         lines: { orderBy: { code: "asc" } },
       },
       orderBy: { docketDate: "desc" },
       take: 200,
     });
+  });
+
+  app.get("/projects/:projectId/invoice-summary", { preHandler: commercialManagers }, async req => {
+    const { projectId } = z.object({ projectId: z.string().uuid() }).parse(req.params);
+    await requireOrganisationProject(app, req, projectId);
+    const [uninvoiced, invoiced, invoices] = await Promise.all([
+      app.prisma.docket.aggregate({
+        where: { organisationId: req.auth.organisationId, projectId, invoiceId: null, status: { in: invoiceableStatuses } },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
+      }),
+      app.prisma.docket.aggregate({
+        where: { organisationId: req.auth.organisationId, projectId, invoiceId: { not: null } },
+        _count: { _all: true },
+        _sum: { totalAmount: true },
+      }),
+      app.prisma.docketInvoice.findMany({
+        where: { organisationId: req.auth.organisationId, projectId },
+        include: { _count: { select: { dockets: true, items: true } } },
+        orderBy: { createdAt: "desc" },
+        take: 12,
+      }),
+    ]);
+    return {
+      projectId,
+      uninvoicedCount: uninvoiced._count._all,
+      uninvoicedTotal: uninvoiced._sum.totalAmount ?? 0,
+      invoicedCount: invoiced._count._all,
+      invoicedTotal: invoiced._sum.totalAmount ?? 0,
+      invoices,
+    };
+  });
+
+  app.post("/projects/:projectId/invoices", { preHandler: commercialManagers }, async (req, reply) => {
+    const { projectId } = z.object({ projectId: z.string().uuid() }).parse(req.params);
+    const body = z.object({
+      periodStart: z.coerce.date().optional(),
+      periodEnd: z.coerce.date().optional(),
+      issueNow: z.boolean().default(false),
+      gstRate: z.number().min(0).max(1).default(0),
+      notes: z.string().max(4000).optional(),
+    }).parse(req.body);
+    const project = await requireOrganisationProject(app, req, projectId);
+    const dockets = await app.prisma.docket.findMany({
+      where: { organisationId: req.auth.organisationId, projectId, invoiceId: null, status: { in: invoiceableStatuses } },
+      include: { lines: { orderBy: { code: "asc" } } },
+      orderBy: [{ docketDate: "asc" }, { submittedAt: "asc" }],
+    });
+    if (!dockets.length) return reply.code(409).send({ error: "There are no uninvoiced dockets for this project" });
+    const sequence = await app.prisma.docketInvoice.count({ where: { organisationId: req.auth.organisationId, projectId } });
+    const subtotalAmount = Number(dockets.reduce((total, docket) => total + toNumber(docket.totalAmount), 0).toFixed(2));
+    const gstAmount = Number((subtotalAmount * body.gstRate).toFixed(2));
+    const totalAmount = Number((subtotalAmount + gstAmount).toFixed(2));
+    const periodStart = body.periodStart ?? dockets[0]!.docketDate;
+    const periodEnd = body.periodEnd ?? dockets[dockets.length - 1]!.docketDate;
+    const invoice = await app.prisma.$transaction(async tx => {
+      const created = await tx.docketInvoice.create({
+        data: {
+          organisationId: req.auth.organisationId,
+          projectId,
+          invoiceNumber: invoiceNumber(project.code, sequence),
+          periodStart,
+          periodEnd,
+          status: body.issueNow ? Status.SUBMITTED : Status.DRAFT,
+          subtotalAmount,
+          gstAmount,
+          totalAmount,
+          notes: body.notes?.trim() || undefined,
+          createdById: req.auth.userId,
+          issuedAt: body.issueNow ? new Date() : undefined,
+          items: {
+            create: dockets.flatMap(docket => docket.lines.map(line => ({
+              docketId: docket.id,
+              docketLineId: line.id,
+              code: line.code,
+              description: line.description,
+              quantity: line.quantity,
+              unit: line.unit,
+              unitRate: line.unitRateSnapshot,
+              amount: line.lineAmount,
+            }))),
+          },
+        },
+        include: { items: true },
+      });
+      await tx.docket.updateMany({ where: { id: { in: dockets.map(docket => docket.id) }, invoiceId: null }, data: { invoiceId: created.id } });
+      return created;
+    });
+    await audit(app, req, "CREATE", "DocketInvoice", invoice.id, { projectId, docketCount: dockets.length, totalAmount });
+    return reply.code(201).send(invoice);
   });
 
   app.get("/rates/admin", { preHandler: commercialManagers }, async req => {

@@ -302,6 +302,8 @@ function ProjectDetailPanel({ project, canEdit, onResources }: { project: Projec
   const reports = project.dailyReports ?? [];
   const actuals = project.productionActuals ?? [];
   const dockets = project.dockets ?? [];
+  const uninvoicedDocketTotal = dockets.filter((docket) => !docket.invoiceId).reduce((total, docket) => total + Number(docket.totalAmount ?? 0), 0);
+  const invoicedDocketTotal = dockets.filter((docket) => docket.invoiceId).reduce((total, docket) => total + Number(docket.totalAmount ?? 0), 0);
   const subProjects = project.subProjects ?? [];
 
   return (
@@ -401,11 +403,23 @@ function ProjectDetailPanel({ project, canEdit, onResources }: { project: Projec
             <p className="tiny muted">No dayworks or schedule-of-rates dockets yet.</p>
           ) : (
             <div className="stack" style={{ gap: 8, marginTop: 8 }}>
+              {canEdit && (
+                <div className="summary-grid">
+                  <div className="summary-item">
+                    <span>Not invoiced</span>
+                    <b>{formatCurrency(uninvoicedDocketTotal)}</b>
+                  </div>
+                  <div className="summary-item">
+                    <span>Invoiced</span>
+                    <b>{formatCurrency(invoicedDocketTotal)}</b>
+                  </div>
+                </div>
+              )}
               {dockets.slice(0, 5).map((docket) => (
                 <div key={docket.id}>
                   <div className="row-between">
                     <span className="tiny"><b>{docket.docketType === "SCHEDULE_OF_RATES" ? "SOR" : "Dayworks"}</b> · {formatDate(docket.docketDate)}</span>
-                    <span className="tiny">{canEdit ? formatCurrency(docket.totalAmount) : docket.lines.map((line) => `${line.quantity} ${line.unit}`).join(", ")}</span>
+                    <span className="tiny">{canEdit ? `${formatCurrency(docket.totalAmount)}${docket.invoiceId ? " invoiced" : ""}` : docket.lines.map((line) => `${line.quantity} ${line.unit}`).join(", ")}</span>
                   </div>
                   {docket.description && <div className="tiny muted">{docket.description}</div>}
                 </div>

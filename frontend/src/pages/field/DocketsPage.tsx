@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Layout } from "../../components/Layout.tsx";
 import { ProjectSelect } from "../../components/ProjectSelect.tsx";
-import { EmptyState, ErrorAlert, Field, Icon, Loading, Modal, Select, StatusBadge, TextArea, TextInput, useToast } from "../../components/ui.tsx";
+import { EmptyState, ErrorAlert, Field, Icon, Loading, Modal, Select, StatTile, StatusBadge, TextArea, TextInput, useToast } from "../../components/ui.tsx";
 import { api } from "../../lib/api.ts";
 import { PROJECT_LEADERS, useAuth } from "../../lib/auth.tsx";
 import { formatCurrency, formatDate, isoDateOnly, titleCase, todayInput } from "../../lib/format.ts";
-import type { Docket, DocketRate, DocketRateBasis, DocketType } from "../../lib/types.ts";
+import type { Docket, DocketInvoice, DocketInvoiceSummary, DocketRate, DocketRateBasis, DocketType } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
 
 const DOCKET_TYPES: DocketType[] = ["SCHEDULE_OF_RATES", "DAYWORKS"];
@@ -13,6 +13,11 @@ const RATE_BASIS: DocketRateBasis[] = ["MEASURED_WORK", "LABOUR", "PLANT", "MATE
 
 function docketTypeLabel(type: DocketType) {
   return type === "SCHEDULE_OF_RATES" ? "Schedule of rates" : "Dayworks";
+}
+
+function numberValue(value?: string | number | null) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function RateModal({ onClose, projectId }: { onClose: () => void; projectId: string }) {
@@ -128,6 +133,7 @@ export function DocketsPage() {
   const myDockets = useApiQuery<Docket[]>("/api/v1/dockets/my");
   const adminRates = useApiQuery<DocketRate[]>(canManage ? "/api/v1/dockets/rates/admin" : null);
   const adminDockets = useApiQuery<Docket[]>(canManage ? "/api/v1/dockets" : null, projectId ? { projectId } : undefined);
+  const invoiceSummary = useApiQuery<DocketInvoiceSummary>(canManage && projectId ? `/api/v1/dockets/projects/${projectId}/invoice-summary` : null);
 
   const ratesById = useMemo(() => new Map((rates.data ?? []).map((rate) => [rate.id, rate])), [rates.data]);
   const selectedRate = ratesById.get(lineDraft.rateId);
@@ -158,6 +164,14 @@ export function DocketsPage() {
       }),
     ["/api/v1/dockets/my", "/api/v1/dockets"],
   );
+  const invoiceMutation = useMutation(
+    () =>
+      api<DocketInvoice>(`/api/v1/dockets/projects/${projectId}/invoices`, {
+        method: "POST",
+        body: { issueNow: false },
+      }),
+    ["/api/v1/dockets", "/api/v1/dockets/projects"],
+  );
 
   const submit = () =>
     mutation.run({
@@ -168,6 +182,21 @@ export function DocketsPage() {
         setLines([]);
       },
     });
+
+  const generateInvoice = () =>
+    invoiceMutation.run({
+      onSuccess: (invoice) => {
+        toast.push(`Invoice ${invoice.invoiceNumber} created`);
+      },
+    });
+
+  const uninvoicedDockets = (adminDockets.data ?? []).filter((docket) => !docket.invoiceId);
+  const invoicedDockets = (adminDockets.data ?? []).filter((docket) => docket.invoiceId);
+  const submittedToday = (myDockets.data ?? []).filter((docket) => docket.docketDate.slice(0, 10) === todayInput()).length;
+  const quantityToday = (myDockets.data ?? [])
+    .filter((docket) => docket.docketDate.slice(0, 10) === todayInput())
+    .flatMap((docket) => docket.lines)
+    .reduce((total, line) => total + numberValue(line.quantity), 0);
 
   return (
     <Layout
@@ -180,6 +209,17 @@ export function DocketsPage() {
         ) : undefined
       }
     >
+      <div className="stat-grid">
+        <StatTile label="Submitted today" value={submittedToday} foot="Across your site dockets" tone="primary" />
+        <StatTile label="Quantity today" value={quantityToday.toLocaleString()} foot="Measured units across submitted dockets" tone="neutral" />
+        {canManage && (
+          <>
+            <StatTile label="Value of uninvoiced dockets" value={formatCurrency(invoiceSummary.data?.uninvoicedTotal ?? uninvoicedDockets.reduce((total, docket) => total + numberValue(docket.totalAmount), 0))} foot={`${invoiceSummary.data?.uninvoicedCount ?? uninvoicedDockets.length} docket(s) waiting`} tone="warning" />
+            <StatTile label="Invoiced docket revenue" value={formatCurrency(invoiceSummary.data?.invoicedTotal ?? invoicedDockets.reduce((total, docket) => total + numberValue(docket.totalAmount), 0))} foot={`${invoiceSummary.data?.invoicedCount ?? invoicedDockets.length} docket(s) invoiced`} tone="good" />
+          </>
+        )}
+      </div>
+
       <section className="card card-pad stack">
         <div className="form-grid">
           <Field label="Project" required>
@@ -303,7 +343,37 @@ export function DocketsPage() {
       </section>
 
       {canManage && (
-        <div className="grid grid-2">
+        <div className="stack">
+          <section className="card">
+            <div className="card-header">
+              <div>
+                <h2>Project invoicing</h2>
+                <span className="hint">Creates one draft invoice from all uninvoiced dockets linked to the selected project.</span>
+              </div>
+              <button className="btn btn-primary" disabled={!projectId || invoiceMutation.running || (invoiceSummary.data?.uninvoicedCount ?? uninvoicedDockets.length) === 0} onClick={generateInvoice}>
+                {invoiceMutation.running ? "Building invoice..." : "Generate invoice"}
+              </button>
+            </div>
+            <div className="card-pad">
+              <ErrorAlert error={invoiceMutation.error ?? invoiceSummary.error} onDismiss={invoiceMutation.reset} />
+              <div className="summary-grid">
+                <div className="summary-item">
+                  <span>Uninvoiced</span>
+                  <b>{formatCurrency(invoiceSummary.data?.uninvoicedTotal ?? 0)}</b>
+                </div>
+                <div className="summary-item">
+                  <span>Already invoiced</span>
+                  <b>{formatCurrency(invoiceSummary.data?.invoicedTotal ?? 0)}</b>
+                </div>
+                <div className="summary-item">
+                  <span>Invoices</span>
+                  <b>{invoiceSummary.data?.invoices.length ?? 0}</b>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <div className="grid grid-2">
           <section className="card">
             <div className="card-header">
               <h2>Rate book</h2>
@@ -341,7 +411,7 @@ export function DocketsPage() {
                       <td>{formatDate(docket.docketDate)}</td>
                       <td>{docket.worker ? `${docket.worker.firstName} ${docket.worker.lastName}` : "-"}</td>
                       <td>{docketTypeLabel(docket.docketType)}</td>
-                      <td><StatusBadge status={docket.status} /></td>
+                      <td><StatusBadge status={docket.invoiceId ? "APPROVED" : docket.status} /></td>
                       <td className="num">{formatCurrency(docket.totalAmount)}</td>
                     </tr>
                   ))}
@@ -349,6 +419,7 @@ export function DocketsPage() {
               </table>
             </div>
           </section>
+          </div>
         </div>
       )}
 
