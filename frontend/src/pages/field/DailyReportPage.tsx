@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Layout } from "../../components/Layout.tsx";
 import { ProjectSelect } from "../../components/ProjectSelect.tsx";
 import { ErrorAlert, Field, Icon, Select, TextArea, TextInput, useToast } from "../../components/ui.tsx";
@@ -40,6 +40,58 @@ interface VisitorRow {
 }
 
 const WEATHER_CONDITIONS = ["FINE", "OVERCAST", "RAIN", "STORM", "HIGH_WIND", "EXTREME_HEAT"];
+const DRAFT_KEY = "tirgeo.daily-report.draft";
+
+interface DailyReportDraft {
+  projectId: string;
+  reportDate: string;
+  weather: { condition: string; tempMin: string; tempMax: string; rainfallMm: string };
+  personnel: PersonnelRow[];
+  plant: PlantRow[];
+  activities: ActivityRow[];
+  quantities: QuantityRow[];
+  delays: DelayRow[];
+  visitors: VisitorRow[];
+  safetyNotes: string;
+}
+
+function readDraft(): DailyReportDraft | null {
+  try {
+    const raw = localStorage.getItem(DRAFT_KEY);
+    return raw ? (JSON.parse(raw) as DailyReportDraft) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(draft: DailyReportDraft) {
+  const hasContent =
+    draft.projectId ||
+    draft.personnel.some((row) => row.name.trim() || row.role.trim() || row.hours.trim()) ||
+    draft.plant.some((row) => row.asset.trim() || row.hours.trim() || row.notes.trim()) ||
+    draft.activities.some((row) => row.description.trim() || row.location.trim() || row.progress.trim()) ||
+    draft.quantities.some((row) => row.item.trim() || row.quantity.trim() || row.unit.trim()) ||
+    draft.delays.some((row) => row.cause.trim() || row.hours.trim() || row.detail.trim()) ||
+    draft.visitors.some((row) => row.name.trim() || row.company.trim() || row.purpose.trim()) ||
+    draft.safetyNotes.trim();
+  if (!hasContent) {
+    clearDraft();
+    return;
+  }
+  try {
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+  } catch {
+    // Local storage may be unavailable in private browsing or locked-down devices.
+  }
+}
+
+function clearDraft() {
+  try {
+    localStorage.removeItem(DRAFT_KEY);
+  } catch {
+    // Ignore storage cleanup failures; the successful server submit is what matters.
+  }
+}
 
 export function DailyReportPage() {
   const toast = useToast();
@@ -53,7 +105,30 @@ export function DailyReportPage() {
   const [delays, setDelays] = useState<DelayRow[]>([]);
   const [visitors, setVisitors] = useState<VisitorRow[]>([]);
   const [safetyNotes, setSafetyNotes] = useState("");
+  const [draftLoaded, setDraftLoaded] = useState(false);
   const recents = listRecents("daily-reports");
+
+  useEffect(() => {
+    const draft = readDraft();
+    if (draft) {
+      setProjectId(draft.projectId ?? "");
+      setReportDate(draft.reportDate || todayInput());
+      setWeather(draft.weather ?? { condition: "FINE", tempMin: "", tempMax: "", rainfallMm: "" });
+      setPersonnel(draft.personnel?.length ? draft.personnel : [{ name: "", role: "", hours: "" }]);
+      setPlant(draft.plant ?? []);
+      setActivities(draft.activities?.length ? draft.activities : [{ description: "", location: "", progress: "" }]);
+      setQuantities(draft.quantities ?? []);
+      setDelays(draft.delays ?? []);
+      setVisitors(draft.visitors ?? []);
+      setSafetyNotes(draft.safetyNotes ?? "");
+    }
+    setDraftLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!draftLoaded) return;
+    writeDraft({ projectId, reportDate, weather, personnel, plant, activities, quantities, delays, visitors, safetyNotes });
+  }, [activities, delays, draftLoaded, personnel, plant, projectId, quantities, reportDate, safetyNotes, visitors, weather]);
 
   const mutation = useMutation(
     () =>
@@ -101,6 +176,10 @@ export function DailyReportPage() {
           sublabel: `${personnel.filter((p) => p.name.trim()).length} personnel · ${activities.filter((a) => a.description.trim()).length} activities`,
         });
         toast.push("Daily diary submitted");
+        clearDraft();
+        setProjectId("");
+        setReportDate(todayInput());
+        setWeather({ condition: "FINE", tempMin: "", tempMax: "", rainfallMm: "" });
         setPersonnel([{ name: "", role: "", hours: "" }]);
         setPlant([]);
         setActivities([{ description: "", location: "", progress: "" }]);

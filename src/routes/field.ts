@@ -1,11 +1,12 @@
 import type { FastifyPluginAsync } from "fastify";
+import { AccountSection } from "@prisma/client";
 import { z } from "zod";
-import { authed, requireOrganisationProject } from "../lib/access.js";
+import { requireOrganisationProject, requireSection } from "../lib/access.js";
 import { audit } from "../lib/audit.js";
 import { civilLocation, materialDocket, productionQuantity } from "../lib/civil.js";
 
 const routes: FastifyPluginAsync = async app => {
-  app.post("/daily-reports", { preHandler: authed }, async (req, reply) => {
+  app.post("/daily-reports", { preHandler: requireSection(AccountSection.DAILY_REPORT) }, async (req, reply) => {
     const b = z.object({
       projectId: z.string().uuid(),
       reportDate: z.coerce.date(),
@@ -51,7 +52,7 @@ const routes: FastifyPluginAsync = async app => {
     await audit(app, req, "CREATE", "DailyReport", report.id, report); return reply.code(201).send(report);
   });
 
-  app.get("/projects/:projectId/production-actuals", { preHandler: authed }, async req => {
+  app.get("/projects/:projectId/production-actuals", { preHandler: requireSection(AccountSection.DAILY_REPORT) }, async req => {
     const { projectId } = z.object({ projectId: z.string().uuid() }).parse(req.params);
     const q = z.object({ from: z.coerce.date().optional(), to: z.coerce.date().optional(), costCodeId: z.string().uuid().optional() }).parse(req.query);
     await requireOrganisationProject(app, req, projectId);
