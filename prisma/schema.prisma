@@ -385,9 +385,9 @@ model User {
   grantedSectionAccess       UserSectionAccess[]        @relation("UserSectionAccessGrantedBy")
   timesheetApprovalRequests  TimesheetApprovalRequest[] @relation("TimesheetApprover")
   notifications              Notification[]
-  chainageObservations       ChainageObservation[]       @relation("ChainageObservationCreatedBy")
-  createdDockets             Docket[]                    @relation("DocketCreatedBy")
-  createdDocketInvoices      DocketInvoice[]             @relation("DocketInvoiceCreatedBy")
+  chainageObservations       ChainageObservation[]      @relation("ChainageObservationCreatedBy")
+  createdDockets             Docket[]                   @relation("DocketCreatedBy")
+  createdDocketInvoices      DocketInvoice[]            @relation("DocketInvoiceCreatedBy")
 
   @@unique([organisationId, email])
 }
@@ -407,35 +407,35 @@ model UserSectionAccess {
 }
 
 model Worker {
-  id                      String                   @id @default(uuid())
-  organisationId          String
-  userId                  String?                  @unique
-  employeeNumber          String
-  firstName               String
-  lastName                String
-  employmentType          String
-  classification          String?
-  awardCode               String?
-  baseHourlyRate          Decimal?                 @db.Decimal(12, 2)
-  currentProjectId        String?
+  id                       String                   @id @default(uuid())
+  organisationId           String
+  userId                   String?                  @unique
+  employeeNumber           String
+  firstName                String
+  lastName                 String
+  employmentType           String
+  classification           String?
+  awardCode                String?
+  baseHourlyRate           Decimal?                 @db.Decimal(12, 2)
+  currentProjectId         String?
   currentProjectAssignedAt DateTime?
-  commencementDate        DateTime
-  terminationDate         DateTime?
-  emergencyContact        Json?
-  payrollDetailsEncrypted String?
-  organisation            Organisation             @relation(fields: [organisationId], references: [id])
-  user                    User?                    @relation(fields: [userId], references: [id])
-  currentProject          Project?                 @relation("WorkerCurrentProject", fields: [currentProjectId], references: [id])
-  competencies            Competency[]
-  timesheets              Timesheet[]
-  inductions              Induction[]
-  preStarts               PlantPreStart[]
-  payrollMappings         PayrollEmployeeMapping[]
-  dockets                 Docket[]
-  dailyCostLines          DailyProjectCostLine[]
-  safetyAssignments       SafetyAssignment[]
-  safetyAcknowledgements  SafetyAcknowledgement[]
-  ownedCorrectiveActions  CorrectiveAction[]       @relation("CorrectiveActionOwner")
+  commencementDate         DateTime
+  terminationDate          DateTime?
+  emergencyContact         Json?
+  payrollDetailsEncrypted  String?
+  organisation             Organisation             @relation(fields: [organisationId], references: [id])
+  user                     User?                    @relation(fields: [userId], references: [id])
+  currentProject           Project?                 @relation("WorkerCurrentProject", fields: [currentProjectId], references: [id])
+  competencies             Competency[]
+  timesheets               Timesheet[]
+  inductions               Induction[]
+  preStarts                PlantPreStart[]
+  payrollMappings          PayrollEmployeeMapping[]
+  dockets                  Docket[]
+  dailyCostLines           DailyProjectCostLine[]
+  safetyAssignments        SafetyAssignment[]
+  safetyAcknowledgements   SafetyAcknowledgement[]
+  ownedCorrectiveActions   CorrectiveAction[]       @relation("CorrectiveActionOwner")
 
   @@unique([organisationId, employeeNumber])
   @@index([organisationId, currentProjectId])
@@ -501,9 +501,9 @@ model Project {
   dockets                Docket[]
   docketInvoices         DocketInvoice[]
   dailyCostDrafts        DailyProjectCostDraft[]
-  currentWorkers         Worker[]                 @relation("WorkerCurrentProject")
+  currentWorkers         Worker[]                @relation("WorkerCurrentProject")
   plantTelemetryReadings PlantTelemetryReading[]
-  currentPlant           Plant[]                  @relation("PlantCurrentProject")
+  currentPlant           Plant[]                 @relation("PlantCurrentProject")
   chainageAlignments     ChainageAlignment[]
   chainageObservations   ChainageObservation[]
 
@@ -512,45 +512,45 @@ model Project {
 }
 
 model ChainageAlignment {
-  id           String                 @id @default(uuid())
-  projectId    String
-  name         String
-  roadRef      String?
-  direction    String?
-  startLabel   String?
-  endLabel     String?
-  startChainageM Decimal              @db.Decimal(12, 1)
-  endChainageM   Decimal              @db.Decimal(12, 1)
-  geometry     Json?
-  notes        String?
-  createdAt    DateTime               @default(now())
-  project      Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  observations ChainageObservation[]
+  id             String                @id @default(uuid())
+  projectId      String
+  name           String
+  roadRef        String?
+  direction      String?
+  startLabel     String?
+  endLabel       String?
+  startChainageM Decimal               @db.Decimal(12, 1)
+  endChainageM   Decimal               @db.Decimal(12, 1)
+  geometry       Json?
+  notes          String?
+  createdAt      DateTime              @default(now())
+  project        Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  observations   ChainageObservation[]
 
   @@index([projectId, name])
 }
 
 model ChainageObservation {
-  id           String    @id @default(uuid())
+  id           String            @id @default(uuid())
   projectId    String
   alignmentId  String
-  chainageM    Decimal   @db.Decimal(12, 1)
-  side         String    @default("CENTRE")
-  offsetM      Decimal?  @db.Decimal(8, 2)
-  latitude     Decimal?  @db.Decimal(10, 7)
-  longitude    Decimal?  @db.Decimal(10, 7)
-  gpsAccuracyM Decimal?  @db.Decimal(8, 2)
-  category     String    @default("ISSUE")
+  chainageM    Decimal           @db.Decimal(12, 1)
+  side         String            @default("CENTRE")
+  offsetM      Decimal?          @db.Decimal(8, 2)
+  latitude     Decimal?          @db.Decimal(10, 7)
+  longitude    Decimal?          @db.Decimal(10, 7)
+  gpsAccuracyM Decimal?          @db.Decimal(8, 2)
+  category     String            @default("ISSUE")
   title        String
   description  String?
-  status       String    @default("OPEN")
-  photoIds     String[]  @default([])
-  observedAt   DateTime  @default(now())
-  createdAt    DateTime  @default(now())
+  status       String            @default("OPEN")
+  photoIds     String[]          @default([])
+  observedAt   DateTime          @default(now())
+  createdAt    DateTime          @default(now())
   createdById  String
-  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project      Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
   alignment    ChainageAlignment @relation(fields: [alignmentId], references: [id], onDelete: Cascade)
-  createdBy    User      @relation("ChainageObservationCreatedBy", fields: [createdById], references: [id])
+  createdBy    User              @relation("ChainageObservationCreatedBy", fields: [createdById], references: [id])
 
   @@index([projectId, observedAt])
   @@index([alignmentId, chainageM])
@@ -586,30 +586,35 @@ model ProjectCostPlan {
 }
 
 model CostEntry {
-  id            String          @id @default(uuid())
-  projectId     String
-  costCodeId    String?
-  type          CostEntryType
-  status        CostEntryStatus @default(ACCRUED)
-  supplier      String?
-  description   String
-  incurredAt    DateTime
-  invoiceNumber String?
-  quantity      Decimal?        @db.Decimal(14, 3)
-  unit          String?
-  unitRate      Decimal?        @db.Decimal(14, 2)
-  amount        Decimal         @db.Decimal(16, 2)
-  gstAmount     Decimal         @default(0) @db.Decimal(16, 2)
-  committed     Boolean         @default(false)
-  source        String          @default("MANUAL")
-  createdById   String
-  createdAt     DateTime        @default(now())
-  project       Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  costCode      CostCode?       @relation(fields: [costCodeId], references: [id])
+  id                    String          @id @default(uuid())
+  projectId             String
+  costCodeId            String?
+  type                  CostEntryType
+  status                CostEntryStatus @default(ACCRUED)
+  supplier              String?
+  description           String
+  incurredAt            DateTime
+  invoiceNumber         String?
+  quantity              Decimal?        @db.Decimal(14, 3)
+  unit                  String?
+  unitRate              Decimal?        @db.Decimal(14, 2)
+  amount                Decimal         @db.Decimal(16, 2)
+  gstAmount             Decimal         @default(0) @db.Decimal(16, 2)
+  committed             Boolean         @default(false)
+  source                String          @default("MANUAL")
+  sourceId              String?
+  evidence              Json?
+  attachmentFileAssetId String?
+  createdById           String
+  createdAt             DateTime        @default(now())
+  project               Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  costCode              CostCode?       @relation(fields: [costCodeId], references: [id])
 
   @@index([projectId, incurredAt])
   @@index([projectId, type])
   @@index([costCodeId])
+  @@unique([source, sourceId])
+  @@index([attachmentFileAssetId])
 }
 
 model CostForecast {
@@ -702,35 +707,35 @@ model DocketRate {
 }
 
 model Docket {
-  id             String       @id @default(uuid())
-  organisationId String
-  projectId      String
-  workerId       String?
-  createdById    String
-  docketType     DocketType
-  docketDate     DateTime
-  reference      String?
-  location       String?
-  chainageFrom   Decimal?     @db.Decimal(12, 1)
-  chainageTo     Decimal?     @db.Decimal(12, 1)
-  description    String?
-  status         Status       @default(SUBMITTED)
-  submittedAt    DateTime     @default(now())
-  approvedAt     DateTime?
-  approvedById   String?
-  invoiceId      String?
-  rejectedAt     DateTime?
+  id              String         @id @default(uuid())
+  organisationId  String
+  projectId       String
+  workerId        String?
+  createdById     String
+  docketType      DocketType
+  docketDate      DateTime
+  reference       String?
+  location        String?
+  chainageFrom    Decimal?       @db.Decimal(12, 1)
+  chainageTo      Decimal?       @db.Decimal(12, 1)
+  description     String?
+  status          Status         @default(SUBMITTED)
+  submittedAt     DateTime       @default(now())
+  approvedAt      DateTime?
+  approvedById    String?
+  invoiceId       String?
+  rejectedAt      DateTime?
   rejectionReason String?
-  notes          String?
-  totalAmount    Decimal      @default(0) @db.Decimal(16, 2)
-  gstAmount      Decimal      @default(0) @db.Decimal(16, 2)
-  currency       String       @default("AUD")
-  organisation   Organisation @relation(fields: [organisationId], references: [id], onDelete: Cascade)
-  project        Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  worker         Worker?      @relation(fields: [workerId], references: [id], onDelete: SetNull)
-  createdBy      User         @relation("DocketCreatedBy", fields: [createdById], references: [id])
-  invoice        DocketInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  lines          DocketLine[]
+  notes           String?
+  totalAmount     Decimal        @default(0) @db.Decimal(16, 2)
+  gstAmount       Decimal        @default(0) @db.Decimal(16, 2)
+  currency        String         @default("AUD")
+  organisation    Organisation   @relation(fields: [organisationId], references: [id], onDelete: Cascade)
+  project         Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  worker          Worker?        @relation(fields: [workerId], references: [id], onDelete: SetNull)
+  createdBy       User           @relation("DocketCreatedBy", fields: [createdById], references: [id])
+  invoice         DocketInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  lines           DocketLine[]
 
   @@index([organisationId, docketDate])
   @@index([projectId, docketDate])
@@ -767,36 +772,36 @@ model DocketInvoice {
 }
 
 model DocketInvoiceItem {
-  id              String        @id @default(uuid())
-  invoiceId       String
-  docketId        String
-  docketLineId    String?
-  code            String
-  description     String
-  quantity        Decimal       @db.Decimal(14, 3)
-  unit            String
-  unitRate        Decimal       @db.Decimal(14, 2)
-  amount          Decimal       @db.Decimal(16, 2)
-  invoice         DocketInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  id           String        @id @default(uuid())
+  invoiceId    String
+  docketId     String
+  docketLineId String?
+  code         String
+  description  String
+  quantity     Decimal       @db.Decimal(14, 3)
+  unit         String
+  unitRate     Decimal       @db.Decimal(14, 2)
+  amount       Decimal       @db.Decimal(16, 2)
+  invoice      DocketInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
   @@index([invoiceId])
   @@index([docketId])
 }
 
 model DocketLine {
-  id              String      @id @default(uuid())
-  docketId        String
-  rateId          String?
-  code            String
-  description     String
-  basis           DocketRateBasis
-  quantity        Decimal     @db.Decimal(14, 3)
-  unit            String
-  unitRateSnapshot Decimal    @db.Decimal(14, 2)
-  lineAmount      Decimal     @db.Decimal(16, 2)
-  notes           String?
-  docket          Docket      @relation(fields: [docketId], references: [id], onDelete: Cascade)
-  rate            DocketRate? @relation(fields: [rateId], references: [id], onDelete: SetNull)
+  id               String          @id @default(uuid())
+  docketId         String
+  rateId           String?
+  code             String
+  description      String
+  basis            DocketRateBasis
+  quantity         Decimal         @db.Decimal(14, 3)
+  unit             String
+  unitRateSnapshot Decimal         @db.Decimal(14, 2)
+  lineAmount       Decimal         @db.Decimal(16, 2)
+  notes            String?
+  docket           Docket          @relation(fields: [docketId], references: [id], onDelete: Cascade)
+  rate             DocketRate?     @relation(fields: [rateId], references: [id], onDelete: SetNull)
 
   @@index([docketId])
   @@index([rateId])
@@ -909,27 +914,27 @@ model PayRun {
 }
 
 model Plant {
-  id                String                  @id @default(uuid())
-  organisationId    String
-  assetNumber       String
-  type              String
-  make              String?
-  model             String?
-  serialNumber      String?
-  registration      String?
-  currentProjectId  String?
+  id                       String                  @id @default(uuid())
+  organisationId           String
+  assetNumber              String
+  type                     String
+  make                     String?
+  model                    String?
+  serialNumber             String?
+  registration             String?
+  currentProjectId         String?
   currentProjectAssignedAt DateTime?
-  hourMeter         Decimal?                @db.Decimal(12, 1)
-  odometerKm        Int?
-  status            String                  @default("AVAILABLE")
-  nextServiceAt     DateTime?
-  nextServiceHours  Decimal?                @db.Decimal(12, 1)
-  organisation      Organisation            @relation(fields: [organisationId], references: [id])
-  currentProject    Project?                @relation("PlantCurrentProject", fields: [currentProjectId], references: [id])
-  preStarts         PlantPreStart[]
-  dailyCostLines    DailyProjectCostLine[]
-  clearances        PlantClearance[]
-  telemetryReadings PlantTelemetryReading[]
+  hourMeter                Decimal?                @db.Decimal(12, 1)
+  odometerKm               Int?
+  status                   String                  @default("AVAILABLE")
+  nextServiceAt            DateTime?
+  nextServiceHours         Decimal?                @db.Decimal(12, 1)
+  organisation             Organisation            @relation(fields: [organisationId], references: [id])
+  currentProject           Project?                @relation("PlantCurrentProject", fields: [currentProjectId], references: [id])
+  preStarts                PlantPreStart[]
+  dailyCostLines           DailyProjectCostLine[]
+  clearances               PlantClearance[]
+  telemetryReadings        PlantTelemetryReading[]
 
   @@unique([organisationId, assetNumber])
   @@index([organisationId, currentProjectId])

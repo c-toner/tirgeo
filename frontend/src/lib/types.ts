@@ -225,6 +225,10 @@ export interface CostEntry {
   gstAmount: string | number;
   committed: boolean;
   source: string;
+  sourceId?: string | null;
+  evidence?: unknown;
+  attachmentFileAssetId?: string | null;
+  attachment?: FileAsset | null;
   createdAt: string;
   costCode?: { id: string; code: string; description: string } | null;
 }
@@ -285,6 +289,25 @@ export interface DailyProjectCostDraft {
 
 export interface CostTrackingProjectDetail extends CostTrackingProjectSummary {
   costCodes: CostCode[];
+  costCodePerformance: Array<{
+    costCodeId: string | null;
+    code: string;
+    description: string;
+    budget: number;
+    actual: number;
+    committed: number;
+    forecast: number;
+    exposure: number;
+    variance: number;
+    usedPercent: number | null;
+  }>;
+  attention: {
+    draftDays: number;
+    missingRates: number;
+    unallocated: number;
+    disputed: number;
+    missingEvidence: number;
+  };
   costEntries: CostEntry[];
   costForecasts: CostForecast[];
   dailyCostDrafts: DailyProjectCostDraft[];

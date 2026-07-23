@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Layout } from "../../components/Layout.tsx";
 import { ProjectSelect } from "../../components/ProjectSelect.tsx";
 import {
@@ -15,7 +15,7 @@ import {
   TextInput,
   useToast,
 } from "../../components/ui.tsx";
-import { api } from "../../lib/api.ts";
+import { api, getApiBase, getToken } from "../../lib/api.ts";
 import { formatCurrency, formatDate, isoDateOnly, titleCase, todayInput } from "../../lib/format.ts";
 import type {
   CostEntryStatus,
@@ -24,6 +24,7 @@ import type {
   CostTrackingProjectSummary,
   DailyProjectCostDraft,
   DailyProjectCostLine,
+  FileAsset,
   ForecastConfidence,
 } from "../../lib/types.ts";
 import { invalidate, useApiQuery, useMutation } from "../../lib/useApi.ts";
@@ -43,14 +44,63 @@ const COST_TYPES: CostEntryType[] = [
 const COST_STATUSES: CostEntryStatus[] = ["COMMITTED", "ACCRUED", "INVOICED", "APPROVED", "PAID", "DISPUTED"];
 const CONFIDENCE: ForecastConfidence[] = ["LOW", "MEDIUM", "HIGH"];
 
+type InvoiceExtractResult = {
+  fileAsset: FileAsset;
+  suggestion: {
+    amount: number | null;
+    supplier: string | null;
+    invoiceNumber: string | null;
+    description: string;
+    incurredAt: string;
+    type: CostEntryType;
+    costCodeId: string | null;
+    costCodeLabel: string | null;
+    possibleDuplicate: {
+      id: string;
+      projectId: string;
+      invoiceNumber?: string | null;
+      supplier?: string | null;
+      amount: string | number;
+      incurredAt: string;
+      description: string;
+    } | null;
+    confidence: string;
+    message: string;
+  };
+};
+
 function percent(value?: number | null): string {
   return value === null || value === undefined ? "-" : `${value.toFixed(1)}%`;
 }
 
-function moneyNumber(value?: string | number | null): number {
-  if (value === null || value === undefined || value === "") return 0;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : 0;
+function dateInputDaysAgo(days: number): string {
+  const value = new Date();
+  value.setDate(value.getDate() - days);
+  return value.toISOString().slice(0, 10);
+}
+
+async function openEvidence(file: FileAsset) {
+  const preview = window.open("", "_blank");
+  try {
+    const token = getToken();
+    const response = await fetch(new URL(`${getApiBase()}/api/v1/files/${file.id}/download`, window.location.origin), {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!response.ok) throw new Error("Evidence could not be opened");
+    const objectUrl = URL.createObjectURL(await response.blob());
+    if (preview) preview.location.href = objectUrl;
+    else {
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.target = "_blank";
+      link.rel = "noreferrer";
+      link.click();
+    }
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  } catch (error) {
+    preview?.close();
+    throw error;
+  }
 }
 
 function marginTone(status: string): "critical" | "serious" | "warning" | "good" {
@@ -133,6 +183,7 @@ function CostPlanModal({ detail, onClose }: { detail: CostTrackingProjectDetail;
 
 function CostEntryModal({ detail, onClose }: { detail: CostTrackingProjectDetail; onClose: () => void }) {
   const toast = useToast();
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [form, setForm] = useState({
     costCodeId: "",
     type: "MATERIALS" as CostEntryType,
@@ -148,7 +199,25 @@ function CostEntryModal({ detail, onClose }: { detail: CostTrackingProjectDetail
     gstAmount: "",
     committed: false,
   });
+  const [attachmentFileAssetId, setAttachmentFileAssetId] = useState("");
+  const [invoiceFileName, setInvoiceFileName] = useState("");
+  const [invoiceMessage, setInvoiceMessage] = useState("");
+  const [invoiceSuggestion, setInvoiceSuggestion] = useState<InvoiceExtractResult["suggestion"] | null>(null);
+  const [allowDuplicate, setAllowDuplicate] = useState(false);
   const set = (key: keyof typeof form) => (value: string | boolean) => setForm((current) => ({ ...current, [key]: value }));
+  const extractMutation = useMutation<InvoiceExtractResult>(
+    async () => {
+      const file = fileInputRef.current?.files?.[0];
+      if (!file) throw new Error("Choose an invoice, docket or receipt first");
+      const formData = new FormData();
+      formData.append("file", file);
+      return api(`/api/v1/commercial/cost-tracking/projects/${detail.project.id}/invoice-costs/extract`, {
+        method: "POST",
+        formData,
+      });
+    },
+    [],
+  );
   const mutation = useMutation(
     () =>
       api("/api/v1/commercial/cost-tracking/cost-entries", {
@@ -168,6 +237,11 @@ function CostEntryModal({ detail, onClose }: { detail: CostTrackingProjectDetail
           amount: Number(form.amount),
           gstAmount: form.gstAmount ? Number(form.gstAmount) : 0,
           committed: form.committed,
+          source: attachmentFileAssetId ? "INVOICE_UPLOAD" : "MANUAL",
+          sourceId: attachmentFileAssetId || undefined,
+          attachmentFileAssetId: attachmentFileAssetId || undefined,
+          evidence: attachmentFileAssetId ? { fileAssetId: attachmentFileAssetId, review: "USER_CONFIRMED" } : undefined,
+          allowDuplicate,
         },
       }),
     ["/api/v1/commercial/cost-tracking"],
@@ -184,7 +258,7 @@ function CostEntryModal({ detail, onClose }: { detail: CostTrackingProjectDetail
           </button>
           <button
             className="btn btn-primary"
-            disabled={mutation.running || !form.description.trim() || !form.amount || !form.incurredAt}
+            disabled={mutation.running || !form.description.trim() || !form.amount || !form.incurredAt || (!!invoiceSuggestion?.possibleDuplicate && !allowDuplicate)}
             onClick={() =>
               mutation.run({
                 onSuccess: () => {
@@ -201,7 +275,70 @@ function CostEntryModal({ detail, onClose }: { detail: CostTrackingProjectDetail
       large
     >
       <ErrorAlert error={mutation.error} onDismiss={mutation.reset} />
+      <ErrorAlert error={extractMutation.error} onDismiss={extractMutation.reset} />
+      {(invoiceSuggestion?.possibleDuplicate || mutation.error?.code === "DUPLICATE_COST_INVOICE") && (
+        <div className="alert alert-warning" role="alert">
+          <div>
+            <b>Possible duplicate invoice</b>
+            <div>Check the existing cost before adding this invoice again. Duplicate costs will overstate project expenditure and reduce the reported margin.</div>
+            <label className="check-row" style={{ marginTop: 8 }}>
+              <input type="checkbox" checked={allowDuplicate} onChange={(event) => setAllowDuplicate(event.target.checked)} />
+              I have checked the existing cost and want to add this invoice again
+            </label>
+          </div>
+        </div>
+      )}
       <div className="form-grid">
+        <Field label="Invoice, docket or receipt" span2 hint="Optional. Upload evidence and review the extracted total before adding the cost.">
+          <div className="row">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,.docx,.xlsx,.csv,.txt,image/*"
+              onChange={() => {
+                setInvoiceFileName(fileInputRef.current?.files?.[0]?.name ?? "");
+                setAttachmentFileAssetId("");
+                setInvoiceMessage("");
+                setInvoiceSuggestion(null);
+                setAllowDuplicate(false);
+                extractMutation.reset();
+              }}
+            />
+            <button
+              className="btn btn-ghost"
+              disabled={extractMutation.running || !invoiceFileName}
+              onClick={() =>
+                extractMutation.run({
+                  onSuccess: (result) => {
+                    const suggestion = result.suggestion;
+                    setAttachmentFileAssetId(result.fileAsset.id);
+                    setInvoiceMessage(suggestion.message);
+                    setInvoiceSuggestion(suggestion);
+                    setAllowDuplicate(false);
+                    setForm((current) => ({
+                      ...current,
+                      type: suggestion.type,
+                      status: "ACCRUED",
+                      costCodeId: suggestion.costCodeId ?? current.costCodeId,
+                      supplier: suggestion.supplier ?? current.supplier,
+                      invoiceNumber: suggestion.invoiceNumber ?? current.invoiceNumber,
+                      description: suggestion.description || current.description,
+                      incurredAt: suggestion.incurredAt || current.incurredAt,
+                      amount: suggestion.amount !== null ? String(suggestion.amount) : current.amount,
+                    }));
+                    toast.push("Evidence uploaded. Review the extracted cost before adding it.");
+                  },
+                })
+              }
+            >
+              <Icon name="upload" size={15} /> {extractMutation.running ? "Reading..." : "Read file"}
+            </button>
+          </div>
+          {invoiceMessage && <p className="muted" style={{ margin: "8px 0 0" }}>{invoiceMessage}</p>}
+          {invoiceSuggestion?.costCodeLabel && (
+            <p className="tiny muted" style={{ margin: "4px 0 0" }}>Remembered coding: {invoiceSuggestion.costCodeLabel}</p>
+          )}
+        </Field>
         <Field label="Cost code">
           <Select value={form.costCodeId} onChange={set("costCodeId")} allowEmpty emptyLabel="Unallocated" options={costCodeOptions} />
         </Field>
@@ -277,11 +414,22 @@ function draftLineForm(line: DailyProjectCostLine): DraftLineForm {
   };
 }
 
-function DailyCostDraftEditor({ detail, draft }: { detail: CostTrackingProjectDetail; draft: DailyProjectCostDraft }) {
+function DailyCostDraftEditor({
+  detail,
+  draft,
+  selected,
+  onSelectedChange,
+}: {
+  detail: CostTrackingProjectDetail;
+  draft: DailyProjectCostDraft;
+  selected: boolean;
+  onSelectedChange: (selected: boolean) => void;
+}) {
   const toast = useToast();
   const [rows, setRows] = useState<DraftLineForm[]>(() => draft.lines.map(draftLineForm));
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const costCodeOptions = detail.costCodes.map((code) => ({ value: code.id, label: `${code.code} - ${code.description}` }));
+  const isPosted = draft.status === "APPROVED";
   useEffect(() => {
     setRows(draft.lines.map(draftLineForm));
     setRemovedIds([]);
@@ -333,26 +481,30 @@ function DailyCostDraftEditor({ detail, draft }: { detail: CostTrackingProjectDe
   return (
     <div className="stack" style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
       <div className="row" style={{ justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <b>{formatDate(draft.costDate)}</b>
-          <div className="tiny muted">{rows.length} cost lines · {formatCurrency(total)}</div>
-        </div>
+        <label className="row" style={{ alignItems: "flex-start" }}>
+          <input type="checkbox" checked={selected} disabled={isPosted || rows.length === 0} onChange={(event) => onSelectedChange(event.target.checked)} />
+          <span>
+            <b>{formatDate(draft.costDate)}</b>
+            <div className="tiny muted">{rows.length} cost lines · {formatCurrency(total)}{isPosted ? " · posted" : ""}</div>
+          </span>
+        </label>
         <div className="row">
-          <button className="btn btn-ghost btn-sm" onClick={() => addRow("LABOUR")}>
+          <button className="btn btn-ghost btn-sm" disabled={isPosted} onClick={() => addRow("LABOUR")}>
             <Icon name="plus" size={14} /> Labour
           </button>
-          <button className="btn btn-ghost btn-sm" onClick={() => addRow("PLANT")}>
+          <button className="btn btn-ghost btn-sm" disabled={isPosted} onClick={() => addRow("PLANT")}>
             <Icon name="plus" size={14} /> Plant
           </button>
           <button
             className="btn btn-primary btn-sm"
-            disabled={mutation.running || rows.some((row) => !row.description.trim())}
+            disabled={isPosted || mutation.running || rows.some((row) => !row.description.trim())}
             onClick={() => mutation.run({ onSuccess: () => toast.push("Daily cost draft saved") })}
           >
-            {mutation.running ? "Saving..." : "Save"}
+            {mutation.running ? "Saving..." : "Save draft"}
           </button>
         </div>
       </div>
+      {isPosted && <p className="muted" style={{ margin: 0 }}>This day has already been posted to the project cost tracker.</p>}
       <ErrorAlert error={mutation.error} onDismiss={mutation.reset} />
       <div className="table-wrap">
         <table className="table">
@@ -371,26 +523,26 @@ function DailyCostDraftEditor({ detail, draft }: { detail: CostTrackingProjectDe
             {rows.map((row, index) => (
               <tr key={row.id ?? `new-${index}`}>
                 <td>
-                  <TextInput value={row.description} onChange={(value) => updateRow(index, { description: value })} />
+                  <TextInput value={row.description} onChange={(value) => updateRow(index, { description: value })} disabled={isPosted} />
                   {row.source !== "MANUAL" && <div className="tiny muted">{titleCase(row.source)}</div>}
                 </td>
                 <td>
-                  <Select value={row.type} onChange={(value) => updateRow(index, { type: value as CostEntryType })} options={[{ value: "LABOUR", label: "Labour" }, { value: "PLANT", label: "Plant" }, { value: "OTHER", label: "Other" }]} />
+                  <Select value={row.type} onChange={(value) => updateRow(index, { type: value as CostEntryType })} disabled={isPosted} options={[{ value: "LABOUR", label: "Labour" }, { value: "PLANT", label: "Plant" }, { value: "OTHER", label: "Other" }]} />
                 </td>
                 <td>
-                  <Select value={row.costCodeId} onChange={(value) => updateRow(index, { costCodeId: value })} allowEmpty emptyLabel="Unallocated" options={costCodeOptions} />
+                  <Select value={row.costCodeId} onChange={(value) => updateRow(index, { costCodeId: value })} disabled={isPosted} allowEmpty emptyLabel="Unallocated" options={costCodeOptions} />
                 </td>
                 <td>
-                  <TextInput value={row.quantity} onChange={(value) => updateRow(index, { quantity: value })} type="number" min={0} inputMode="decimal" />
+                  <TextInput value={row.quantity} onChange={(value) => updateRow(index, { quantity: value })} disabled={isPosted} type="number" min={0} inputMode="decimal" />
                 </td>
                 <td>
-                  <TextInput value={row.unitRate} onChange={(value) => updateRow(index, { unitRate: value, amount: "" })} type="number" min={0} inputMode="decimal" />
+                  <TextInput value={row.unitRate} onChange={(value) => updateRow(index, { unitRate: value, amount: "" })} disabled={isPosted} type="number" min={0} inputMode="decimal" />
                 </td>
                 <td>
-                  <TextInput value={row.amount || String(((Number(row.quantity) || 0) * (Number(row.unitRate) || 0)).toFixed(2))} onChange={(value) => updateRow(index, { amount: value })} type="number" min={0} inputMode="decimal" />
+                  <TextInput value={row.amount || String(((Number(row.quantity) || 0) * (Number(row.unitRate) || 0)).toFixed(2))} onChange={(value) => updateRow(index, { amount: value })} disabled={isPosted} type="number" min={0} inputMode="decimal" />
                 </td>
                 <td>
-                  <button className="icon-btn" aria-label="Remove line" onClick={() => removeRow(index)}>
+                  <button className="icon-btn" aria-label="Remove line" disabled={isPosted} onClick={() => removeRow(index)}>
                     <Icon name="x" size={15} />
                   </button>
                 </td>
@@ -485,29 +637,43 @@ function ForecastModal({ detail, onClose }: { detail: CostTrackingProjectDetail;
 }
 
 export function CostTrackingPage() {
+  const toast = useToast();
   const [projectId, setProjectId] = useState("");
   const [editingPlan, setEditingPlan] = useState(false);
   const [addingCost, setAddingCost] = useState(false);
   const [addingForecast, setAddingForecast] = useState(false);
+  const [selectedDraftIds, setSelectedDraftIds] = useState<string[]>([]);
+  const [openingEvidenceId, setOpeningEvidenceId] = useState("");
+  const [draftFrom, setDraftFrom] = useState(() => dateInputDaysAgo(30));
+  const [draftTo, setDraftTo] = useState(() => todayInput());
   const summaries = useApiQuery<CostTrackingProjectSummary[]>("/api/v1/commercial/cost-tracking/summary");
   const detail = useApiQuery<CostTrackingProjectDetail>(projectId ? `/api/v1/commercial/cost-tracking/projects/${projectId}` : null);
+  const draftQuery = useApiQuery<DailyProjectCostDraft[]>(
+    projectId ? `/api/v1/commercial/cost-tracking/projects/${projectId}/daily-cost-drafts` : null,
+    { from: draftFrom, to: draftTo },
+  );
 
   useEffect(() => {
     if (!projectId && summaries.data?.[0]) setProjectId(summaries.data[0].project.id);
   }, [projectId, summaries.data]);
+  useEffect(() => setSelectedDraftIds([]), [projectId, draftFrom, draftTo]);
 
   const selectedSummary = summaries.data?.find((item) => item.project.id === projectId);
   const selected = detail.data ?? selectedSummary;
-  const costByType = useMemo(() => {
-    const rows = new Map<string, number>();
-    for (const entry of detail.data?.costEntries ?? []) {
-      if (entry.status === "DISPUTED") continue;
-      rows.set(entry.type, (rows.get(entry.type) ?? 0) + moneyNumber(entry.amount));
-    }
-    return [...rows.entries()].sort((a, b) => b[1] - a[1]);
-  }, [detail.data]);
-
+  const visibleDrafts = draftQuery.data ?? detail.data?.dailyCostDrafts ?? [];
+  const selectableDraftIds = visibleDrafts.filter(draft => draft.status !== "APPROVED" && draft.lines.length > 0).map(draft => draft.id);
   const refreshAll = () => invalidate("/api/v1/commercial/cost-tracking");
+  const postDraftMutation = useMutation(
+    () =>
+      api(`/api/v1/commercial/cost-tracking/projects/${projectId}/daily-cost-drafts/post`, {
+        method: "POST",
+        body: { draftIds: selectedDraftIds },
+      }),
+    ["/api/v1/commercial/cost-tracking"],
+  );
+  const toggleDraftSelection = (draftId: string, checked: boolean) => {
+    setSelectedDraftIds((current) => checked ? [...new Set([...current, draftId])] : current.filter((id) => id !== draftId));
+  };
 
   return (
     <Layout
@@ -537,7 +703,7 @@ export function CostTrackingPage() {
             </button>
           </div>
         </div>
-        <ErrorAlert error={summaries.error ?? detail.error} />
+        <ErrorAlert error={summaries.error ?? detail.error ?? draftQuery.error} />
       </section>
 
       {(summaries.loading || detail.loading) && <Loading />}
@@ -596,20 +762,21 @@ export function CostTrackingPage() {
 
             <section className="card">
               <div className="card-header">
-                <h2>Actual cost mix</h2>
-                <span className="hint">Manual direct costs by category.</span>
+                <h2>Needs attention</h2>
+                <span className="hint">Work the exceptions, not every transaction.</span>
               </div>
               <div className="card-pad stack">
-                {costByType.length === 0 ? (
-                  <EmptyState title="No direct costs captured" hint="Add supplier invoices, dockets or accruals to start seeing cost mix." />
-                ) : (
-                  costByType.map(([type, amount]) => (
-                    <div key={type} className="summary-list-item">
-                      <b>{titleCase(type)}</b>
-                      <span>{formatCurrency(amount)}</span>
-                    </div>
-                  ))
-                )}
+                {detail.data && Object.values(detail.data.attention).every(value => value === 0) ? (
+                  <div className="alert alert-good"><b>Cost book is tidy.</b> No current exceptions need review.</div>
+                ) : detail.data ? (
+                  <div className="summary-list">
+                    <div className="summary-list-item"><span>Draft days ready for review</span><b>{detail.data.attention.draftDays}</b></div>
+                    <div className="summary-list-item"><span>Draft lines missing a rate</span><b>{detail.data.attention.missingRates}</b></div>
+                    <div className="summary-list-item"><span>Unallocated costs or lines</span><b>{detail.data.attention.unallocated}</b></div>
+                    <div className="summary-list-item"><span>Invoices missing evidence</span><b>{detail.data.attention.missingEvidence}</b></div>
+                    <div className="summary-list-item"><span>Disputed costs</span><b>{detail.data.attention.disputed}</b></div>
+                  </div>
+                ) : <Loading />}
               </div>
             </section>
           </div>
@@ -619,16 +786,113 @@ export function CostTrackingPage() {
               <section className="card">
                 <div className="card-header">
                   <div>
+                    <h2>Cost code control</h2>
+                    <span className="hint">Budget versus actual, committed, and forecast exposure.</span>
+                  </div>
+                  <StatusBadge status={detail.data.costCodePerformance.some(row => row.variance < 0) ? "AT_RISK" : "ON_TRACK"} />
+                </div>
+                <div className="table-wrap">
+                  <table className="table cost-control-table">
+                    <thead>
+                      <tr>
+                        <th>Cost code</th>
+                        <th style={{ textAlign: "right" }}>Budget</th>
+                        <th style={{ textAlign: "right" }}>Actual</th>
+                        <th style={{ textAlign: "right" }}>Committed</th>
+                        <th style={{ textAlign: "right" }}>Forecast</th>
+                        <th style={{ textAlign: "right" }}>Exposure</th>
+                        <th style={{ textAlign: "right" }}>Variance</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detail.data.costCodePerformance.map(row => (
+                        <tr key={`${row.code}-${row.costCodeId ?? "project"}`}>
+                          <td>
+                            <b>{row.code}</b>
+                            <div className="tiny muted">{row.description}</div>
+                            <div className="cost-progress" aria-label={row.usedPercent === null ? "No budget set" : `${row.usedPercent}% of budget exposed`}>
+                              <span
+                                className={row.variance < 0 ? "over" : ""}
+                                style={{ width: `${Math.min(Math.max(row.usedPercent ?? 0, 0), 100)}%` }}
+                              />
+                            </div>
+                          </td>
+                          <td style={{ textAlign: "right" }}>{formatCurrency(row.budget)}</td>
+                          <td style={{ textAlign: "right" }}>{formatCurrency(row.actual)}</td>
+                          <td style={{ textAlign: "right" }}>{formatCurrency(row.committed)}</td>
+                          <td style={{ textAlign: "right" }}>{formatCurrency(row.forecast)}</td>
+                          <td style={{ textAlign: "right" }}><b>{formatCurrency(row.exposure)}</b></td>
+                          <td className={row.variance < 0 ? "cost-negative" : "cost-positive"} style={{ textAlign: "right" }}>
+                            {formatCurrency(row.variance)}
+                          </td>
+                        </tr>
+                      ))}
+                      {detail.data.costCodePerformance.length === 0 && (
+                        <tr>
+                          <td colSpan={7}><EmptyState title="No cost code activity" hint="Add cost-code budgets or allocate project costs to see the control view." /></td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+
+              <section className="card">
+                <div className="card-header">
+                  <div>
                     <h2>Daily draft costs</h2>
                     <span className="hint">Timecards and pre-starts linked to this project, grouped by work day.</span>
                   </div>
-                  <StatusBadge status="DRAFT" />
+                  <button
+                    className="btn btn-primary btn-sm"
+                    disabled={postDraftMutation.running || selectedDraftIds.length === 0}
+                    aria-busy={postDraftMutation.running}
+                    onClick={() =>
+                      postDraftMutation.run({
+                        onSuccess: () => {
+                          toast.push(`${selectedDraftIds.length} draft day${selectedDraftIds.length === 1 ? "" : "s"} posted to project costs`);
+                          setSelectedDraftIds([]);
+                        },
+                      })
+                    }
+                  >
+                    {postDraftMutation.running ? "Posting..." : `Post selected (${selectedDraftIds.length})`}
+                  </button>
                 </div>
                 <div className="card-pad stack">
-                  {detail.data.dailyCostDrafts.length === 0 ? (
+                  <ErrorAlert error={postDraftMutation.error} onDismiss={postDraftMutation.reset} />
+                  <div className="draft-review-controls">
+                    <Field label="From">
+                      <TextInput value={draftFrom} onChange={setDraftFrom} type="date" />
+                    </Field>
+                    <Field label="To">
+                      <TextInput value={draftTo} onChange={setDraftTo} type="date" />
+                    </Field>
+                    <div className="row draft-selection-actions">
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        disabled={selectableDraftIds.length === 0}
+                        onClick={() => setSelectedDraftIds(selectableDraftIds)}
+                      >
+                        Select all ready ({selectableDraftIds.length})
+                      </button>
+                      {selectedDraftIds.length > 0 && (
+                        <button className="btn btn-ghost btn-sm" onClick={() => setSelectedDraftIds([])}>Clear</button>
+                      )}
+                    </div>
+                  </div>
+                  {draftQuery.loading ? <Loading /> : visibleDrafts.length === 0 ? (
                     <EmptyState title="No draft daily costs" hint="Submitted timecards and plant pre-starts will appear here for review." />
                   ) : (
-                    detail.data.dailyCostDrafts.map((draft) => <DailyCostDraftEditor key={draft.id} detail={detail.data!} draft={draft} />)
+                    visibleDrafts.map((draft) => (
+                      <DailyCostDraftEditor
+                        key={draft.id}
+                        detail={detail.data!}
+                        draft={draft}
+                        selected={selectedDraftIds.includes(draft.id)}
+                        onSelectedChange={(checked) => toggleDraftSelection(draft.id, checked)}
+                      />
+                    ))
                   )}
                 </div>
               </section>
@@ -646,6 +910,7 @@ export function CostTrackingPage() {
                         <th>Description</th>
                         <th>Type</th>
                         <th>Status</th>
+                        <th>Evidence</th>
                         <th style={{ textAlign: "right" }}>Amount</th>
                       </tr>
                     </thead>
@@ -659,12 +924,33 @@ export function CostTrackingPage() {
                           </td>
                           <td>{titleCase(entry.type)}</td>
                           <td><StatusBadge status={entry.status} /></td>
+                          <td>
+                            {entry.attachment ? (
+                              <button
+                                className="btn btn-ghost btn-sm"
+                                aria-busy={openingEvidenceId === entry.id}
+                                disabled={openingEvidenceId === entry.id}
+                                onClick={async () => {
+                                  setOpeningEvidenceId(entry.id);
+                                  try {
+                                    await openEvidence(entry.attachment!);
+                                  } catch {
+                                    toast.push("Evidence could not be opened", "error");
+                                  } finally {
+                                    setOpeningEvidenceId("");
+                                  }
+                                }}
+                              >
+                                <Icon name="file" size={14} /> {openingEvidenceId === entry.id ? "Opening..." : "View"}
+                              </button>
+                            ) : <span className="tiny muted">None</span>}
+                          </td>
                           <td style={{ textAlign: "right" }}>{formatCurrency(entry.amount)}</td>
                         </tr>
                       ))}
                       {detail.data.costEntries.length === 0 && (
                         <tr>
-                          <td colSpan={5}>
+                          <td colSpan={6}>
                             <EmptyState title="No costs recorded" />
                           </td>
                         </tr>

@@ -1604,6 +1604,56 @@ table.table {
 
 .summary-list-item:last-child { border-bottom: none; }
 
+.cost-control-table th:not(:first-child),
+.cost-control-table td:not(:first-child) {
+  white-space: nowrap;
+}
+
+.cost-control-table td:first-child {
+  min-width: 220px;
+}
+
+.cost-progress {
+  background: var(--surface-3);
+  border-radius: 3px;
+  height: 5px;
+  margin-top: 7px;
+  overflow: hidden;
+  width: 100%;
+}
+
+.cost-progress span {
+  background: var(--good);
+  display: block;
+  height: 100%;
+}
+
+.cost-progress span.over {
+  background: var(--critical);
+}
+
+.cost-positive {
+  color: var(--good-text);
+  font-weight: 700;
+}
+
+.cost-negative {
+  color: var(--critical-text);
+  font-weight: 700;
+}
+
+.draft-review-controls {
+  align-items: end;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(150px, 190px) minmax(150px, 190px) minmax(0, 1fr);
+}
+
+.draft-selection-actions {
+  justify-content: flex-end;
+  padding-bottom: 1px;
+}
+
 /* ---------- Toasts ---------- */
 
 .toasts {
@@ -1914,6 +1964,11 @@ table.table {
   .stat-grid, .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .grid-2, .form-grid { grid-template-columns: 1fr; }
+  .draft-review-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .draft-selection-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
   .crew-hero { padding: 20px; }
   .crew-hero h2 { font-size: 25px; }
   .crew-action-grid { grid-template-columns: 1fr; }
