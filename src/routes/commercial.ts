@@ -178,11 +178,17 @@ const routes: FastifyPluginAsync = async app => {
       app.prisma.tenderChecklistItem.updateMany({ where: { requirementId: requirement.id }, data: body.reviewStatus === "REJECTED" ? { status: "NOT_APPLICABLE", completedAt: null } : { title: body.title, description: body.detail, mandatory: body.mandatory, status: "TODO", completedAt: null } }),
     ]); await audit(app, req, "REVIEW", "TenderRequirement", result.id, result); return result;
   });
-  app.patch("/tenders/:tenderId/checklist/:id", { preHandler: managers }, async req => {
+  app.patch("/tenders/:tenderId/checklist/:id", { preHandler: managers }, async (req, reply) => {
     const p = z.object({ tenderId: z.string().uuid(), id: z.string().uuid() }).parse(req.params);
     const body = z.object({ status: z.enum(["TODO", "IN_PROGRESS", "COMPLETE", "NOT_APPLICABLE"]), ownerId: z.string().uuid().nullable().optional(), dueAt: z.coerce.date().nullable().optional() }).parse(req.body);
     const item = await app.prisma.tenderChecklistItem.findFirstOrThrow({ where: { id: p.id, tenderId: p.tenderId, tender: { organisationId: req.auth.organisationId } } });
-    if (body.ownerId) await app.prisma.user.findFirstOrThrow({ where: { id: body.ownerId, organisationId: req.auth.organisationId, active: true } });
+    if (body.ownerId) {
+      const [userOwner, workerOwner] = await Promise.all([
+        app.prisma.user.findFirst({ where: { id: body.ownerId, organisationId: req.auth.organisationId, active: true }, select: { id: true } }),
+        app.prisma.worker.findFirst({ where: { id: body.ownerId, organisationId: req.auth.organisationId, terminationDate: null }, select: { id: true } }),
+      ]);
+      if (!userOwner && !workerOwner) return reply.code(400).send({ error: "Assignee must be an active user or worker in your organisation" });
+    }
     const result = await app.prisma.tenderChecklistItem.update({ where: { id: item.id }, data: { ...body, completedAt: body.status === "COMPLETE" ? new Date() : null } }); await audit(app, req, "CHECKLIST_UPDATE", "TenderChecklistItem", result.id, result); return result;
   });
   app.post("/progress-claims", { preHandler: managers }, async (req, reply) => {

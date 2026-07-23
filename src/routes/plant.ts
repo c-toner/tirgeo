@@ -137,7 +137,7 @@ const routes: FastifyPluginAsync = async app => {
   app.post("/", { preHandler: allowSection(AccountSection.PLANT_MANAGEMENT, ...plantManagers) }, async (req, reply) => {
     const body = z.object({ assetNumber: z.string(), type: z.string(), make: z.string().optional(), model: z.string().optional(), serialNumber: z.string().optional(), registration: z.string().optional(), currentProjectId: z.string().uuid().optional(), nextServiceAt: z.coerce.date().optional(), nextServiceHours: z.number().optional() }).parse(req.body);
     if (body.currentProjectId) await requireOrganisationProject(app, req, body.currentProjectId);
-    const plant = await app.prisma.plant.create({ data: { ...body, organisationId: req.auth.organisationId } });
+    const plant = await app.prisma.plant.create({ data: { ...body, currentProjectAssignedAt: body.currentProjectId ? new Date() : undefined, organisationId: req.auth.organisationId } });
     await audit(app, req, "CREATE", "Plant", plant.id, plant); return reply.code(201).send(plant);
   });
   app.patch("/:id/location", { preHandler: allowSection(AccountSection.PLANT_MANAGEMENT, ...plantManagers) }, async (req, reply) => {
@@ -145,7 +145,7 @@ const routes: FastifyPluginAsync = async app => {
     const body = z.object({ projectId: z.string().uuid().nullable() }).parse(req.body);
     const plant = await app.prisma.plant.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId } });
     if (body.projectId) await requireOrganisationProject(app, req, body.projectId);
-    const updated = await app.prisma.plant.update({ where: { id: plant.id }, data: { currentProjectId: body.projectId }, include: { currentProject: true } });
+    const updated = await app.prisma.plant.update({ where: { id: plant.id }, data: { currentProjectId: body.projectId, currentProjectAssignedAt: body.projectId ? (plant.currentProjectId === body.projectId && plant.currentProjectAssignedAt ? plant.currentProjectAssignedAt : new Date()) : null }, include: { currentProject: true } });
     await audit(app, req, "UPDATE_LOCATION", "Plant", id, { previousProjectId: plant.currentProjectId, currentProjectId: body.projectId });
     return reply.send(updated);
   });
@@ -167,7 +167,7 @@ const routes: FastifyPluginAsync = async app => {
     if (body.odometerKm !== undefined && plant.odometerKm !== null && body.odometerKm < plant.odometerKm) return reply.code(409).send({ error: "Odometer cannot move backwards" });
     const [reading] = await app.prisma.$transaction([
       app.prisma.plantTelemetryReading.create({ data: { ...body, plantId: id, organisationId: req.auth.organisationId } }),
-      app.prisma.plant.update({ where: { id }, data: { hourMeter: body.engineHours ?? undefined, odometerKm: body.odometerKm ?? undefined, currentProjectId: body.projectId ?? undefined } }),
+      app.prisma.plant.update({ where: { id }, data: { hourMeter: body.engineHours ?? undefined, odometerKm: body.odometerKm ?? undefined, currentProjectId: body.projectId ?? undefined, currentProjectAssignedAt: body.projectId && (plant.currentProjectId !== body.projectId || !plant.currentProjectAssignedAt) ? new Date() : undefined } }),
     ]);
     await audit(app, req, "TELEMETRY", "Plant", id, { readingId: reading.id, source: reading.source, capturedAt: reading.capturedAt });
     return reply.code(201).send(reading);
@@ -177,7 +177,7 @@ const routes: FastifyPluginAsync = async app => {
     const plant = await app.prisma.plant.findFirstOrThrow({ where: { id, organisationId: req.auth.organisationId } });
     const body = z.object({ workerId: z.string().uuid(), projectId: z.string().uuid().optional(), inspectedAt: z.coerce.date().optional(), hourMeter: z.number().nonnegative().optional(), odometerKm: z.number().int().nonnegative().optional(), checklistTemplateId: z.string().uuid().optional(), answers: z.record(z.union([z.boolean(), z.string(), z.number(), z.null()])), result: z.nativeEnum(InspectionResult), photoIds: z.array(z.string().uuid()).max(30).default([]), defects: z.array(z.object({ questionId: z.string(), item: z.string().min(1), severity: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]), detail: z.string().min(1), photoIds: z.array(z.string().uuid()).max(20).default([]) })).default([]), signature: z.string().min(1).max(500_000) }).parse(req.body);
     if (body.projectId) await requireOrganisationProject(app, req, body.projectId);
-    await app.prisma.worker.findFirstOrThrow({ where: { id: body.workerId, organisationId: req.auth.organisationId, userId: req.auth.userId } });
+    const worker = await app.prisma.worker.findFirstOrThrow({ where: { id: body.workerId, organisationId: req.auth.organisationId, userId: req.auth.userId } });
     const template = body.checklistTemplateId
       ? await app.prisma.preStartTemplate.findFirstOrThrow({ where: { id: body.checklistTemplateId, organisationId: req.auth.organisationId, status: "PUBLISHED", OR: [{ plantType: null }, { plantType: { equals: plant.type, mode: "insensitive" } }] } })
       : await app.prisma.preStartTemplate.findFirst({
@@ -202,16 +202,19 @@ const routes: FastifyPluginAsync = async app => {
       if (photoCount !== submittedPhotoIds.length) return reply.code(400).send({ error: "Every pre-start photo must belong to this organisation" });
     }
     if (body.result === InspectionResult.OUT_OF_SERVICE && body.answers["lockout-tagout"] !== true) return reply.code(409).send({ error: "Out-of-service plant must be locked out or tagged out" });
+    const projectId = body.projectId ?? plant.currentProjectId;
+    const assignedAt = new Date();
     const preStart = await app.prisma.$transaction(async tx => {
-      const created = await tx.plantPreStart.create({ data: { ...body, checklistTemplateId: template.id, plantId: id, checklistVersion: `${template.name}:v${template.version}`, answers: body.answers, defects: body.defects } });
+      const created = await tx.plantPreStart.create({ data: { ...body, projectId, checklistTemplateId: template.id, plantId: id, checklistVersion: `${template.name}:v${template.version}`, answers: body.answers, defects: body.defects } });
       if (submittedPhotoIds.length) {
         await tx.fileAsset.updateMany({
           where: { id: { in: submittedPhotoIds }, organisationId: req.auth.organisationId, deletedAt: null },
-          data: { entityType: "PlantPreStart", entityId: created.id, projectId: body.projectId ?? plant.currentProjectId },
+          data: { entityType: "PlantPreStart", entityId: created.id, projectId },
         });
       }
-      await tx.plant.update({ where: { id }, data: { status: body.result === InspectionResult.OUT_OF_SERVICE ? "OUT_OF_SERVICE" : body.result === InspectionResult.DEFECT ? "DEFECT_REPORTED" : undefined, hourMeter: body.hourMeter, odometerKm: body.odometerKm, currentProjectId: body.projectId ?? plant.currentProjectId } });
-      await tx.auditEvent.create({ data: auditData(req, "PRE_START", "Plant", id, { result: body.result, checklistTemplateId: template.id, checklistVersion: template.version, workerId: body.workerId, photoIds: submittedPhotoIds }) });
+      await tx.plant.update({ where: { id }, data: { status: body.result === InspectionResult.OUT_OF_SERVICE ? "OUT_OF_SERVICE" : body.result === InspectionResult.DEFECT ? "DEFECT_REPORTED" : undefined, hourMeter: body.hourMeter, odometerKm: body.odometerKm, currentProjectId: projectId, currentProjectAssignedAt: projectId && (plant.currentProjectId !== projectId || !plant.currentProjectAssignedAt) ? assignedAt : undefined } });
+      if (projectId && (worker.currentProjectId !== projectId || !worker.currentProjectAssignedAt)) await tx.worker.update({ where: { id: worker.id }, data: { currentProjectId: projectId, currentProjectAssignedAt: assignedAt } });
+      await tx.auditEvent.create({ data: auditData(req, "PRE_START", "Plant", id, { result: body.result, checklistTemplateId: template.id, checklistVersion: template.version, workerId: body.workerId, projectId, photoIds: submittedPhotoIds }) });
       return created;
     });
     return reply.code(201).send(preStart);

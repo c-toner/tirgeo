@@ -12,11 +12,12 @@ import {
   TextInput,
   useToast,
 } from "../../components/ui.tsx";
+import { WorkerSelect } from "../../components/WorkerSelect.tsx";
 import { api, ApiError } from "../../lib/api.ts";
 import { formatDate, formatDateTime, titleCase } from "../../lib/format.ts";
 import { rememberRecent } from "../../lib/recents.ts";
 import { Link } from "../../lib/router.tsx";
-import type { Tender, TenderChecklistItem, TenderRequirement } from "../../lib/types.ts";
+import type { Tender, TenderChecklistItem, TenderRequirement, WorkerSummary } from "../../lib/types.ts";
 import { useApiQuery, useMutation } from "../../lib/useApi.ts";
 
 const CHECKLIST_STATUSES = ["TODO", "IN_PROGRESS", "COMPLETE", "NOT_APPLICABLE"];
@@ -117,12 +118,13 @@ function ChecklistModal({
 }) {
   const toast = useToast();
   const [status, setStatus] = useState(item.status);
-  const [dueAt, setDueAt] = useState("");
+  const [workerId, setWorkerId] = useState(item.ownerId ?? "");
+  const [dueAt, setDueAt] = useState(item.dueAt ? item.dueAt.slice(0, 10) : "");
   const mutation = useMutation(
     () =>
       api(`/api/v1/commercial/tenders/${tenderId}/checklist/${item.id}`, {
         method: "PATCH",
-        body: { status, dueAt: dueAt ? new Date(dueAt).toISOString() : undefined },
+        body: { status, ownerId: workerId || null, dueAt: dueAt ? new Date(dueAt).toISOString() : null },
       }),
     [`/api/v1/commercial/tenders/${tenderId}`],
   );
@@ -157,6 +159,9 @@ function ChecklistModal({
       <Field label="Status">
         <Select value={status} onChange={setStatus} options={CHECKLIST_STATUSES} />
       </Field>
+      <Field label="Assign to worker" hint="Assign parsed RFT tasks to the person who will own the action.">
+        <WorkerSelect value={workerId} onChange={setWorkerId} allowEmpty emptyLabel="Unassigned" autoSelectCurrent={false} />
+      </Field>
       <Field label="Due">
         <TextInput value={dueAt} onChange={setDueAt} type="date" />
       </Field>
@@ -167,6 +172,7 @@ function ChecklistModal({
 export function TenderDetailPage({ tenderId }: { tenderId: string }) {
   const toast = useToast();
   const { data: tender, loading, error, refresh } = useApiQuery<Tender>(`/api/v1/commercial/tenders/${tenderId}`);
+  const { data: workers } = useApiQuery<WorkerSummary[]>("/api/v1/workers");
   const [checklistItem, setChecklistItem] = useState<TenderChecklistItem | null>(null);
 
   useEffect(() => {
@@ -196,6 +202,7 @@ export function TenderDetailPage({ tenderId }: { tenderId: string }) {
   const reviewed = (tender?.requirements ?? []).filter((requirement) => requirement.reviewStatus !== "SUGGESTED");
   const checklist = tender?.checklistItems ?? [];
   const complete = checklist.filter((item) => item.status === "COMPLETE" || item.status === "NOT_APPLICABLE").length;
+  const workerNames = new Map((workers ?? []).map((worker) => [worker.id, `${worker.firstName} ${worker.lastName}`.trim()]));
 
   return (
     <Layout
@@ -322,6 +329,7 @@ export function TenderDetailPage({ tenderId }: { tenderId: string }) {
                     <tr>
                       <th>Item</th>
                       <th>Mandatory</th>
+                      <th>Assignee</th>
                       <th>Due</th>
                       <th>Status</th>
                       <th />
@@ -335,6 +343,7 @@ export function TenderDetailPage({ tenderId }: { tenderId: string }) {
                           {item.description && <div className="tiny">{item.description}</div>}
                         </td>
                         <td>{item.mandatory ? <span className="badge badge-serious">Mandatory</span> : <span className="muted">—</span>}</td>
+                        <td className="tiny">{item.ownerId ? workerNames.get(item.ownerId) ?? "Assigned" : <span className="muted">Unassigned</span>}</td>
                         <td className="tiny">{formatDate(item.dueAt)}</td>
                         <td>
                           <StatusBadge status={item.status} />

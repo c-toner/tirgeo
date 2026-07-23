@@ -800,6 +800,13 @@ textarea.input { resize: vertical; min-height: 74px; }
 
 .table-wrap { overflow-x: auto; }
 
+.project-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: 16px;
+  align-items: start;
+}
+
 table.table {
   width: 100%;
   border-collapse: collapse;
@@ -1754,6 +1761,7 @@ table.table {
   .shell { grid-template-columns: 1fr; }
   .sidebar { display: none; }
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .project-board { grid-template-columns: minmax(0, 1fr); }
   .modal-backdrop {
     place-items: start center;
     overflow-y: auto;

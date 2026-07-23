@@ -150,6 +150,7 @@ export interface LoginResponse {
 
 export interface Project {
   id: string;
+  parentProjectId?: string | null;
   code: string;
   name: string;
   clientName?: string | null;
@@ -161,6 +162,12 @@ export interface Project {
   startDate?: string | null;
   endDate?: string | null;
   createdAt?: string;
+  currentWorkers?: WorkerSummary[];
+  currentPlant?: Plant[];
+  parentProject?: Pick<Project, "id" | "code" | "name"> | null;
+  subProjects?: Array<Pick<Project, "id" | "code" | "name" | "status">>;
+  dailyReports?: DailyReport[];
+  productionActuals?: ProductionActual[];
 }
 
 export interface ProjectCostPlan {
@@ -344,6 +351,7 @@ export interface Plant {
   model?: string | null;
   registration?: string | null;
   currentProjectId?: string | null;
+  currentProjectAssignedAt?: string | null;
   currentProject?: Project | null;
   status: "AVAILABLE" | "IN_USE" | "OUT_OF_SERVICE" | "DEFECT_REPORTED" | string;
   hourMeter?: string | number | null;
@@ -370,6 +378,9 @@ export interface WorkerSummary {
   lastName: string;
   employmentType: string;
   classification?: string | null;
+  currentProjectId?: string | null;
+  currentProjectAssignedAt?: string | null;
+  currentProject?: Pick<Project, "id" | "code" | "name"> | null;
   terminationDate?: string | null;
   isCurrentUser?: boolean;
 }
@@ -704,4 +715,16 @@ export interface DailyReport {
   id: string;
   projectId: string;
   reportDate: string;
+  status?: Status;
+  activities?: unknown;
+  submittedById?: string;
+}
+
+export interface ProductionActual {
+  id: string;
+  projectId: string;
+  activity: string;
+  quantity: string | number;
+  unit: string;
+  capturedAt: string;
 }
