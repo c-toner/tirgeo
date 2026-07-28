@@ -1066,6 +1066,57 @@ table.table {
   gap: 14px;
 }
 
+.chainage-filter-grid {
+  align-items: end;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(220px, 1.6fr) repeat(4, minmax(120px, 1fr));
+}
+
+.chainage-status-strip {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.chainage-status-chip {
+  align-items: center;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 8px 10px;
+}
+
+.chainage-status-chip span {
+  color: var(--ink-2);
+  font-size: 12px;
+  font-weight: 750;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chainage-status-chip b {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.chainage-status-chip:hover,
+.chainage-status-chip.active {
+  border-color: var(--primary);
+}
+
+.chainage-status-chip.active {
+  background: color-mix(in srgb, var(--primary) 13%, var(--surface-2));
+}
+
 .work-map-shell {
   display: grid;
   gap: 8px;
@@ -2031,10 +2082,14 @@ table.table {
   .detail-grid,
   .answer-row,
   .prestart-photo-grid,
+  .chainage-filter-grid,
   .chainage-grid,
   .chainage-location-card,
   .chainage-observation {
     grid-template-columns: 1fr;
+  }
+  .chainage-status-strip {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .answer-pill {
     justify-self: start;

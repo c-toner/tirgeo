@@ -3,52 +3,17 @@ import { FileImage, FileImageLink } from "../components/FileImage.tsx";
 import { Layout } from "../components/Layout.tsx";
 import { ProjectSelect } from "../components/ProjectSelect.tsx";
 import { EmptyState, ErrorAlert, Field, Icon, Loading, Modal, Select, StatusBadge, TextArea, TextInput, useToast } from "../components/ui.tsx";
-import { api } from "../lib/api.ts";
+import { api, ApiError, getApiBase, getToken } from "../lib/api.ts";
+import { CHAINAGE_CATEGORIES, CHAINAGE_SIDES, CHAINAGE_STATUSES, formatChainage, interpolateChainagePosition, nearestChainage, parseChainage, parseGeometry, toNumber } from "../lib/chainage.ts";
 import { formatDateTime, titleCase } from "../lib/format.ts";
 import { prepareImageForUpload } from "../lib/images.ts";
 import type { ChainageAlignment, ChainageObservation, FileAsset } from "../lib/types.ts";
 import { useApiQuery, useMutation } from "../lib/useApi.ts";
 
-const SIDES = ["LEFT", "CENTRE", "RIGHT", "BOTH", "UNKNOWN"];
-const CATEGORIES = ["ISSUE", "DEFECT", "SCOPE", "QUOTE", "PHOTO_RECORD", "ACCESS", "UTILITY", "DRAINAGE"];
 const TILE_SIZE = 256;
 const DEFAULT_CENTER = { latitude: -32.9283, longitude: 151.7817 };
 const MIN_MAP_ZOOM = 8;
 const MAX_MAP_ZOOM = 18;
-
-function toNumber(value?: string | number | null): number {
-  if (value === null || value === undefined || value === "") return 0;
-  return typeof value === "number" ? value : Number(value);
-}
-
-function formatChainage(metres?: string | number | null): string {
-  const value = toNumber(metres);
-  if (!Number.isFinite(value)) return "-";
-  const km = Math.floor(value / 1000);
-  const m = Math.round(value - km * 1000);
-  return `${km}+${String(m).padStart(3, "0")}`;
-}
-
-function parseChainage(value: string): number {
-  const trimmed = value.trim();
-  if (!trimmed) return Number.NaN;
-  if (trimmed.includes("+")) {
-    const [km, metres] = trimmed.split("+").map((part) => Number(part.trim()));
-    return km * 1000 + metres;
-  }
-  return Number(trimmed);
-}
-
-function parseGeometry(text: string): ChainageAlignment["geometry"] | undefined {
-  const coordinates = text
-    .split("\n")
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line) => line.split(",").map((part) => Number(part.trim())))
-    .filter((parts) => parts.length >= 2 && parts.every(Number.isFinite))
-    .map(([lat, lng]) => [lng, lat] as [number, number]);
-  return coordinates.length >= 2 ? { type: "LineString", coordinates } : undefined;
-}
 
 function latLngToWorld(latitude: number, longitude: number, zoom: number) {
   const scale = TILE_SIZE * 2 ** zoom;
@@ -67,73 +32,6 @@ function worldToLatLng(x: number, y: number, zoom: number) {
   return { latitude, longitude };
 }
 
-function haversineM(a: { latitude: number; longitude: number }, b: { latitude: number; longitude: number }) {
-  const r = 6371000;
-  const dLat = ((b.latitude - a.latitude) * Math.PI) / 180;
-  const dLng = ((b.longitude - a.longitude) * Math.PI) / 180;
-  const lat1 = (a.latitude * Math.PI) / 180;
-  const lat2 = (b.latitude * Math.PI) / 180;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
-  return 2 * r * Math.asin(Math.sqrt(h));
-}
-
-function nearestChainage(alignment: ChainageAlignment | undefined, point: { latitude: number; longitude: number }) {
-  const coords = alignment?.geometry?.coordinates ?? [];
-  if (!alignment || coords.length < 2) return null;
-  const points = coords.map(([longitude, latitude]) => ({ latitude, longitude }));
-  const total = points.slice(1).reduce((sum, item, index) => sum + haversineM(points[index], item), 0);
-  if (total <= 0) return null;
-  const originLat = point.latitude;
-  const toXY = (p: { latitude: number; longitude: number }) => ({
-    x: (p.longitude - point.longitude) * 111320 * Math.cos((originLat * Math.PI) / 180),
-    y: (p.latitude - point.latitude) * 110540,
-  });
-  let best = { distanceM: Number.POSITIVE_INFINITY, alongM: 0 };
-  let traversed = 0;
-  for (let i = 0; i < points.length - 1; i += 1) {
-    const a = points[i];
-    const b = points[i + 1];
-    const ax = toXY(a).x;
-    const ay = toXY(a).y;
-    const bx = toXY(b).x;
-    const by = toXY(b).y;
-    const dx = bx - ax;
-    const dy = by - ay;
-    const len2 = dx * dx + dy * dy || 1;
-    const t = Math.min(1, Math.max(0, -(ax * dx + ay * dy) / len2));
-    const px = ax + dx * t;
-    const py = ay + dy * t;
-    const distanceM = Math.sqrt(px * px + py * py);
-    const segLen = haversineM(a, b);
-    if (distanceM < best.distanceM) best = { distanceM, alongM: traversed + segLen * t };
-    traversed += segLen;
-  }
-  const start = toNumber(alignment.startChainageM);
-  const end = toNumber(alignment.endChainageM);
-  return { chainageM: start + (best.alongM / total) * (end - start), distanceM: best.distanceM };
-}
-
-function interpolateChainagePosition(alignment: ChainageAlignment | undefined, chainageM: string | number) {
-  const coords = alignment?.geometry?.coordinates ?? [];
-  if (!alignment || coords.length < 2) return null;
-  const start = toNumber(alignment.startChainageM);
-  const end = toNumber(alignment.endChainageM);
-  const fraction = Math.min(1, Math.max(0, (toNumber(chainageM) - start) / Math.max(1, end - start)));
-  const points = coords.map(([longitude, latitude]) => ({ latitude, longitude }));
-  const lengths = points.slice(1).map((item, index) => haversineM(points[index], item));
-  const total = lengths.reduce((sum, value) => sum + value, 0);
-  let target = total * fraction;
-  for (let i = 0; i < lengths.length; i += 1) {
-    if (target <= lengths[i] || i === lengths.length - 1) {
-      const t = lengths[i] > 0 ? target / lengths[i] : 0;
-      const a = points[i];
-      const b = points[i + 1];
-      return { latitude: a.latitude + (b.latitude - a.latitude) * t, longitude: a.longitude + (b.longitude - a.longitude) * t };
-    }
-    target -= lengths[i];
-  }
-  return points[0];
-}
 
 type WorkMapMarkerItem = { item: ChainageObservation; screen: { left: number; top: number } };
 type WorkMapRenderItem =
@@ -165,6 +63,7 @@ function WorkMap({
   const [center, setCenter] = useState(initialCenter);
   const [zoom, setZoom] = useState(15);
   const [failedTiles, setFailedTiles] = useState<Record<string, true>>({});
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const mapRef = useRef<HTMLDivElement | null>(null);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const gesture = useRef<{
@@ -179,6 +78,15 @@ function WorkMap({
 
   useEffect(() => setCenter(initialCenter), [initialCenter]);
   useEffect(() => setFailedTiles({}), [center.latitude, center.longitude, zoom]);
+  useEffect(() => {
+    const updateOnlineState = () => setIsOnline(navigator.onLine);
+    window.addEventListener("online", updateOnlineState);
+    window.addEventListener("offline", updateOnlineState);
+    return () => {
+      window.removeEventListener("online", updateOnlineState);
+      window.removeEventListener("offline", updateOnlineState);
+    };
+  }, []);
   useEffect(() => {
     const element = mapRef.current;
     if (!element) return;
@@ -351,9 +259,10 @@ function WorkMap({
             />
           );
         })}
-        {Object.keys(failedTiles).length > 0 && (
+        {(!isOnline || Object.keys(failedTiles).length > 0) && (
           <div className="work-map-tile-warning">
-            Base map unavailable. Chainage items are still shown.
+            {!isOnline ? "Offline reference mode. " : "Base map limited. "}
+            Chainage alignments and items are still shown.
           </div>
         )}
         {linePoints.length > 1 && (
@@ -412,19 +321,54 @@ function WorkMap({
       </div>
       <div className="work-map-caption">
         Tap the map to place a draft work item. If the selected road has geometry, TirGeo will calculate the nearest chainage.
+        {!isOnline && " Basemap downloads need service, but project chainage remains visible."}
       </div>
     </div>
   );
 }
 
-function ChainageObservationDetailModal({ observationId, onClose }: { observationId: string; onClose: () => void }) {
+function ChainageObservationDetailModal({ observationId, onClose, onChanged }: { observationId: string; onClose: () => void; onChanged: () => void }) {
   const detailQuery = useApiQuery<ChainageObservation>(`/api/v1/chainage/observations/${observationId}`);
+  const toast = useToast();
   const item = detailQuery.data;
   const title = item ? `${formatChainage(item.chainageM)} · ${item.title}` : "Chainage detail";
+  const updateStatus = useMutation(
+    () =>
+      api<ChainageObservation>(`/api/v1/chainage/observations/${observationId}/status`, {
+        method: "PATCH",
+        body: { status: pendingStatus },
+      }),
+    ["/api/v1/chainage/observations"],
+  );
+  const [pendingStatus, setPendingStatus] = useState("");
+
+  useEffect(() => {
+    if (item) setPendingStatus(item.status);
+  }, [item]);
 
   return (
-    <Modal title={title} onClose={onClose} large>
+    <Modal
+      title={title}
+      onClose={onClose}
+      large
+      footer={item && (
+        <div className="row-between full-width">
+          <Field label="Status">
+            <Select value={pendingStatus} onChange={setPendingStatus} options={[...CHAINAGE_STATUSES]} />
+          </Field>
+          <button
+            className="btn btn-primary"
+            disabled={updateStatus.running || pendingStatus === item.status}
+            onClick={() => updateStatus.run({ onSuccess: () => { toast.push("Chainage status updated"); detailQuery.refresh(); onChanged(); } })}
+            type="button"
+          >
+            {updateStatus.running ? "Updating..." : "Update status"}
+          </button>
+        </div>
+      )}
+    >
       <ErrorAlert error={detailQuery.error} />
+      <ErrorAlert error={updateStatus.error} onDismiss={updateStatus.reset} />
       {detailQuery.loading && !item ? (
         <Loading />
       ) : item ? (
@@ -501,12 +445,31 @@ export function ChainagePage() {
   const [uploading, setUploading] = useState(false);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [selectedObservationId, setSelectedObservationId] = useState<string | null>(null);
+  const [filters, setFilters] = useState({ status: "", category: "", side: "", search: "", chainageFrom: "", chainageTo: "" });
 
   const alignmentsQuery = useApiQuery<ChainageAlignment[]>("/api/v1/chainage/alignments", { projectId: projectId || undefined });
-  const observationsQuery = useApiQuery<ChainageObservation[]>("/api/v1/chainage/observations", { projectId: projectId || undefined, limit: 100 });
+  const observationQueryParams = useMemo(
+    () => ({
+      projectId: projectId || undefined,
+      alignmentId: selectedAlignmentId || undefined,
+      status: filters.status || undefined,
+      category: filters.category || undefined,
+      side: filters.side || undefined,
+      search: filters.search.trim() || undefined,
+      chainageFromM: filters.chainageFrom ? parseChainage(filters.chainageFrom) : undefined,
+      chainageToM: filters.chainageTo ? parseChainage(filters.chainageTo) : undefined,
+      limit: 250,
+    }),
+    [filters, projectId, selectedAlignmentId],
+  );
+  const observationsQuery = useApiQuery<ChainageObservation[]>("/api/v1/chainage/observations", observationQueryParams);
   const alignments = alignmentsQuery.data ?? [];
   const selectedAlignment = alignments.find((alignment) => alignment.id === selectedAlignmentId) ?? alignments[0];
   const observations = observationsQuery.data ?? [];
+  const statusCounts = useMemo(
+    () => observations.reduce<Record<string, number>>((counts, item) => ({ ...counts, [item.status]: (counts[item.status] ?? 0) + 1 }), {}),
+    [observations],
+  );
 
   const alignmentOptions = useMemo(
     () => alignments.map((alignment) => ({ value: alignment.id, label: `${alignment.name} (${formatChainage(alignment.startChainageM)}-${formatChainage(alignment.endChainageM)})` })),
@@ -597,6 +560,31 @@ export function ChainagePage() {
     );
   };
 
+  const exportCsv = async () => {
+    const url = new URL("/api/v1/chainage/observations/export.csv", window.location.origin);
+    for (const [key, value] of Object.entries(observationQueryParams)) {
+      if (value === undefined || value === "") continue;
+      if (typeof value === "number" && !Number.isFinite(value)) continue;
+      url.searchParams.set(key, String(value));
+    }
+    try {
+      const token = getToken();
+      const response = await fetch(new URL(url.pathname + url.search, getApiBase() || window.location.origin), {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      if (!response.ok) throw new ApiError(response.status, "Could not export chainage observations");
+      const blob = await response.blob();
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = href;
+      link.download = `chainage-observations-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(href);
+    } catch (error) {
+      toast.push(error instanceof Error ? error.message : "Could not export chainage observations", "error");
+    }
+  };
+
   return (
     <Layout title="Chainage">
       <section className="card card-pad stack">
@@ -620,7 +608,42 @@ export function ChainagePage() {
             <h2>Work items</h2>
             <p className="muted">Switch between a chainage map and a field list. Tap any item to view details, location and photos.</p>
           </div>
-          <Select value={selectedAlignment?.id ?? ""} onChange={setSelectedAlignmentId} options={alignmentOptions} allowEmpty emptyLabel="Select road" />
+          <div className="row-actions">
+            <button className="btn btn-ghost" onClick={exportCsv} disabled={!observations.length} type="button">
+              <Icon name="download" size={15} /> Export
+            </button>
+            <Select value={selectedAlignmentId} onChange={setSelectedAlignmentId} options={alignmentOptions} allowEmpty emptyLabel="All roads" />
+          </div>
+        </div>
+        <div className="chainage-status-strip">
+          {CHAINAGE_STATUSES.map((status) => (
+            <button
+              className={`chainage-status-chip ${filters.status === status ? "active" : ""}`}
+              key={status}
+              onClick={() => setFilters((current) => ({ ...current, status: current.status === status ? "" : status }))}
+              type="button"
+            >
+              <span>{titleCase(status)}</span>
+              <b>{statusCounts[status] ?? 0}</b>
+            </button>
+          ))}
+        </div>
+        <div className="chainage-filter-grid">
+          <Field label="Search">
+            <TextInput value={filters.search} onChange={(search) => setFilters((current) => ({ ...current, search }))} placeholder="Title, description or road" />
+          </Field>
+          <Field label="Category">
+            <Select value={filters.category} onChange={(category) => setFilters((current) => ({ ...current, category }))} options={[...CHAINAGE_CATEGORIES]} allowEmpty emptyLabel="All categories" />
+          </Field>
+          <Field label="Side">
+            <Select value={filters.side} onChange={(side) => setFilters((current) => ({ ...current, side }))} options={[...CHAINAGE_SIDES]} allowEmpty emptyLabel="All sides" />
+          </Field>
+          <Field label="From">
+            <TextInput value={filters.chainageFrom} onChange={(chainageFrom) => setFilters((current) => ({ ...current, chainageFrom }))} placeholder="0+000" />
+          </Field>
+          <Field label="To">
+            <TextInput value={filters.chainageTo} onChange={(chainageTo) => setFilters((current) => ({ ...current, chainageTo }))} placeholder="12+500" />
+          </Field>
         </div>
         <div className="tabs">
           <button className={`tab ${viewMode === "map" ? "active" : ""}`} onClick={() => setViewMode("map")} type="button">Map ({observations.length})</button>
@@ -717,13 +740,13 @@ export function ChainagePage() {
             <TextInput value={observationForm.chainage} onChange={(chainage) => setObservationForm((form) => ({ ...form, chainage }))} placeholder="2+500" />
           </Field>
           <Field label="Side">
-            <Select value={observationForm.side} onChange={(side) => setObservationForm((form) => ({ ...form, side }))} options={SIDES} />
+            <Select value={observationForm.side} onChange={(side) => setObservationForm((form) => ({ ...form, side }))} options={[...CHAINAGE_SIDES]} />
           </Field>
           <Field label="Offset metres">
             <TextInput value={observationForm.offsetM} onChange={(offsetM) => setObservationForm((form) => ({ ...form, offsetM }))} type="number" inputMode="decimal" />
           </Field>
           <Field label="Category">
-            <Select value={observationForm.category} onChange={(category) => setObservationForm((form) => ({ ...form, category }))} options={CATEGORIES} />
+            <Select value={observationForm.category} onChange={(category) => setObservationForm((form) => ({ ...form, category }))} options={[...CHAINAGE_CATEGORIES]} />
           </Field>
           <Field label="Title" required>
             <TextInput value={observationForm.title} onChange={(title) => setObservationForm((form) => ({ ...form, title }))} placeholder="Headwall undermined" />
@@ -766,7 +789,7 @@ export function ChainagePage() {
         <ErrorAlert error={createObservation.error} onDismiss={createObservation.reset} />
         </div>
       </section>
-      {selectedObservationId && <ChainageObservationDetailModal observationId={selectedObservationId} onClose={() => setSelectedObservationId(null)} />}
+      {selectedObservationId && <ChainageObservationDetailModal observationId={selectedObservationId} onClose={() => setSelectedObservationId(null)} onChanged={observationsQuery.refresh} />}
     </Layout>
   );
 }
