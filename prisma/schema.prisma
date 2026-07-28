@@ -542,6 +542,10 @@ model ChainageObservation {
   longitude    Decimal?          @db.Decimal(10, 7)
   gpsAccuracyM Decimal?          @db.Decimal(8, 2)
   category     String            @default("ISSUE")
+  assetType    String?
+  severity     String?
+  defectCause  String?
+  recommendedAction String?
   title        String
   description  String?
   status       String            @default("OPEN")

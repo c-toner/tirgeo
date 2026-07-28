@@ -344,6 +344,10 @@ export interface ChainageObservation {
   longitude?: string | number | null;
   gpsAccuracyM?: string | number | null;
   category: "ISSUE" | "DEFECT" | "SCOPE" | "QUOTE" | "PHOTO_RECORD" | "ACCESS" | "UTILITY" | "DRAINAGE";
+  assetType?: "ROAD" | "PAVEMENT" | "CULVERT" | "HEADWALL" | "DRAINAGE" | "KERB" | "FOOTPATH" | "SIGNAGE" | "STRUCTURE" | "UTILITY" | "SUBDIVISION" | "OTHER" | null;
+  severity?: "LOW" | "MEDIUM" | "HIGH" | "URGENT" | null;
+  defectCause?: "FLOOD" | "STORM" | "WEAR" | "IMPACT" | "CONSTRUCTION_DEFECT" | "BLOCKED" | "MISSING" | "FAILED" | "UNKNOWN" | null;
+  recommendedAction?: "INSPECT" | "MONITOR" | "CLEAN" | "REPAIR" | "REPLACE" | "MAKE_SAFE" | "QUOTE" | "ADD_TO_WORKS_PACKAGE" | null;
   title: string;
   description?: string | null;
   status: "OPEN" | "IN_REVIEW" | "PRICED" | "ACTIONED" | "CLOSED";

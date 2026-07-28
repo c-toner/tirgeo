@@ -62,6 +62,17 @@ When offline:
 - If no basemap pack exists, render the chainage grid, road polyline, markers and GPS/draft point so crews still have a usable reference.
 - Queue creates/updates/photo uploads for sync when service returns.
 
+### Media GPS
+
+Photo uploads should be treated as location evidence. The web app extracts JPEG EXIF GPS where available before image compression and stores the coordinates in file metadata. If the issue form has no location yet, the first GPS-tagged photo can place the draft marker and calculate nearest chainage from the selected alignment.
+
+Bulk media workflows need a second server-side phase:
+
+- GoPro and dashcam videos often store GPS in embedded telemetry streams rather than ordinary EXIF.
+- Server-side processing should extract track points, timestamps and still-frame references from uploaded video.
+- The user should then review suggested markers before creating observations, rather than the system silently creating a large defect register.
+- Large disaster-recovery uploads should use direct-to-blob upload, background processing, and a review queue.
+
 ### Backend Shape
 
 Add a map-pack manifest API:

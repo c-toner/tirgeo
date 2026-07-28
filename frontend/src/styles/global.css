@@ -1070,7 +1070,7 @@ table.table {
   align-items: end;
   display: grid;
   gap: 10px;
-  grid-template-columns: minmax(220px, 1.6fr) repeat(4, minmax(120px, 1fr));
+  grid-template-columns: minmax(220px, 1.6fr) repeat(auto-fit, minmax(120px, 1fr));
 }
 
 .chainage-status-strip {

@@ -9,6 +9,10 @@ const uuidParam = z.object({ id: z.string().uuid() });
 const chainageSide = z.enum(["LEFT", "CENTRE", "RIGHT", "BOTH", "UNKNOWN"]);
 const observationStatus = z.enum(["OPEN", "IN_REVIEW", "PRICED", "ACTIONED", "CLOSED"]);
 const observationCategory = z.enum(["ISSUE", "DEFECT", "SCOPE", "QUOTE", "PHOTO_RECORD", "ACCESS", "UTILITY", "DRAINAGE"]);
+const assetType = z.enum(["ROAD", "PAVEMENT", "CULVERT", "HEADWALL", "DRAINAGE", "KERB", "FOOTPATH", "SIGNAGE", "STRUCTURE", "UTILITY", "SUBDIVISION", "OTHER"]);
+const severity = z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]);
+const defectCause = z.enum(["FLOOD", "STORM", "WEAR", "IMPACT", "CONSTRUCTION_DEFECT", "BLOCKED", "MISSING", "FAILED", "UNKNOWN"]);
+const recommendedAction = z.enum(["INSPECT", "MONITOR", "CLEAN", "REPAIR", "REPLACE", "MAKE_SAFE", "QUOTE", "ADD_TO_WORKS_PACKAGE"]);
 const coordinate = z.tuple([z.number().min(-180).max(180), z.number().min(-90).max(90)]);
 const geometry = z.object({
   type: z.literal("LineString"),
@@ -38,6 +42,10 @@ const observationFields = z.object({
   longitude: z.number().min(-180).max(180).optional(),
   gpsAccuracyM: z.number().nonnegative().optional(),
   category: observationCategory.default("ISSUE"),
+  assetType: assetType.optional(),
+  severity: severity.optional(),
+  defectCause: defectCause.optional(),
+  recommendedAction: recommendedAction.optional(),
   title: z.string().min(2).max(160),
   description: z.string().max(4000).optional(),
   status: observationStatus.default("OPEN"),
@@ -58,6 +66,8 @@ const observationQuery = z.object({
   alignmentId: z.string().uuid().optional(),
   status: observationStatus.optional(),
   category: observationCategory.optional(),
+  assetType: assetType.optional(),
+  severity: severity.optional(),
   side: chainageSide.optional(),
   search: z.string().trim().optional(),
   chainageFromM: z.coerce.number().nonnegative().optional(),
@@ -79,6 +89,8 @@ function observationWhere(req: FastifyRequest, q: z.infer<typeof observationQuer
     alignmentId: q.alignmentId,
     status: q.status,
     category: q.category,
+    assetType: q.assetType,
+    severity: q.severity,
     side: q.side,
     chainageM: q.chainageFromM !== undefined || q.chainageToM !== undefined ? { gte: q.chainageFromM, lte: q.chainageToM } : undefined,
     observedAt: q.observedFrom || q.observedTo ? { gte: q.observedFrom, lte: q.observedTo } : undefined,
@@ -154,7 +166,7 @@ const routes: FastifyPluginAsync = async app => {
       orderBy: [{ observedAt: "desc" }, { chainageM: "asc" }],
       take: q.limit,
     });
-    const header = ["Project code", "Project", "Road", "Road ref", "Chainage m", "Side", "Offset m", "Category", "Status", "Title", "Description", "Latitude", "Longitude", "GPS accuracy m", "Observed at", "Recorded by", "Photos"];
+    const header = ["Project code", "Project", "Road", "Road ref", "Chainage m", "Side", "Offset m", "Category", "Asset type", "Severity", "Cause", "Recommended action", "Status", "Title", "Description", "Latitude", "Longitude", "GPS accuracy m", "Observed at", "Recorded by", "Photos"];
     const csv = [
       header.map(csvCell).join(","),
       ...rows.map((row) => [
@@ -166,6 +178,10 @@ const routes: FastifyPluginAsync = async app => {
         row.side,
         row.offsetM,
         row.category,
+        row.assetType,
+        row.severity,
+        row.defectCause,
+        row.recommendedAction,
         row.status,
         row.title,
         row.description,

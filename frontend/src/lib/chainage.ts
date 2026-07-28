@@ -3,6 +3,10 @@ import type { ChainageAlignment } from "./types.ts";
 export const CHAINAGE_SIDES = ["LEFT", "CENTRE", "RIGHT", "BOTH", "UNKNOWN"] as const;
 export const CHAINAGE_CATEGORIES = ["ISSUE", "DEFECT", "SCOPE", "QUOTE", "PHOTO_RECORD", "ACCESS", "UTILITY", "DRAINAGE"] as const;
 export const CHAINAGE_STATUSES = ["OPEN", "IN_REVIEW", "PRICED", "ACTIONED", "CLOSED"] as const;
+export const CHAINAGE_ASSET_TYPES = ["ROAD", "PAVEMENT", "CULVERT", "HEADWALL", "DRAINAGE", "KERB", "FOOTPATH", "SIGNAGE", "STRUCTURE", "UTILITY", "SUBDIVISION", "OTHER"] as const;
+export const CHAINAGE_SEVERITIES = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
+export const CHAINAGE_DEFECT_CAUSES = ["FLOOD", "STORM", "WEAR", "IMPACT", "CONSTRUCTION_DEFECT", "BLOCKED", "MISSING", "FAILED", "UNKNOWN"] as const;
+export const CHAINAGE_RECOMMENDED_ACTIONS = ["INSPECT", "MONITOR", "CLEAN", "REPAIR", "REPLACE", "MAKE_SAFE", "QUOTE", "ADD_TO_WORKS_PACKAGE"] as const;
 
 export type ChainageStatus = (typeof CHAINAGE_STATUSES)[number];
 

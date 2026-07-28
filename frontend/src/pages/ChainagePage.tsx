@@ -4,9 +4,9 @@ import { Layout } from "../components/Layout.tsx";
 import { ProjectSelect } from "../components/ProjectSelect.tsx";
 import { EmptyState, ErrorAlert, Field, Icon, Loading, Modal, Select, StatusBadge, TextArea, TextInput, useToast } from "../components/ui.tsx";
 import { api, ApiError, getApiBase, getToken } from "../lib/api.ts";
-import { CHAINAGE_CATEGORIES, CHAINAGE_SIDES, CHAINAGE_STATUSES, formatChainage, interpolateChainagePosition, nearestChainage, parseChainage, parseGeometry, toNumber } from "../lib/chainage.ts";
+import { CHAINAGE_ASSET_TYPES, CHAINAGE_CATEGORIES, CHAINAGE_DEFECT_CAUSES, CHAINAGE_RECOMMENDED_ACTIONS, CHAINAGE_SEVERITIES, CHAINAGE_SIDES, CHAINAGE_STATUSES, formatChainage, interpolateChainagePosition, nearestChainage, parseChainage, parseGeometry, toNumber } from "../lib/chainage.ts";
 import { formatDateTime, titleCase } from "../lib/format.ts";
-import { prepareImageForUpload } from "../lib/images.ts";
+import { extractImageGpsMetadata, prepareImageForUpload } from "../lib/images.ts";
 import type { ChainageAlignment, ChainageObservation, FileAsset } from "../lib/types.ts";
 import { useApiQuery, useMutation } from "../lib/useApi.ts";
 
@@ -42,6 +42,7 @@ function WorkMap({
   alignment,
   observations,
   draft,
+  focusPoint,
   onPick,
   onUseLocation,
   onSelectObservation,
@@ -49,6 +50,7 @@ function WorkMap({
   alignment?: ChainageAlignment;
   observations: ChainageObservation[];
   draft?: { latitude: number; longitude: number } | null;
+  focusPoint?: { latitude: number; longitude: number; requestId: number } | null;
   onPick: (point: { latitude: number; longitude: number; chainageM?: number; snapDistanceM?: number }) => void;
   onUseLocation: () => void;
   onSelectObservation?: (id: string) => void;
@@ -77,6 +79,11 @@ function WorkMap({
   const [mapSize, setMapSize] = useState({ width: 720, height: 440 });
 
   useEffect(() => setCenter(initialCenter), [initialCenter]);
+  useEffect(() => {
+    if (!focusPoint) return;
+    setCenter({ latitude: focusPoint.latitude, longitude: focusPoint.longitude });
+    setZoom((value) => Math.max(value, 16));
+  }, [focusPoint]);
   useEffect(() => setFailedTiles({}), [center.latitude, center.longitude, zoom]);
   useEffect(() => {
     const updateOnlineState = () => setIsOnline(navigator.onLine);
@@ -385,6 +392,10 @@ function ChainageObservationDetailModal({ observationId, onClose, onChanged }: {
           <div className="detail-grid chainage-detail-grid">
             <div><span>Project</span><b>{item.project ? `${item.project.code} · ${item.project.name}` : "Not linked"}</b></div>
             <div><span>Category</span><b>{titleCase(item.category)}</b></div>
+            <div><span>Asset</span><b>{item.assetType ? titleCase(item.assetType) : "Not set"}</b></div>
+            <div><span>Severity</span><b>{item.severity ? titleCase(item.severity) : "Not set"}</b></div>
+            <div><span>Cause</span><b>{item.defectCause ? titleCase(item.defectCause) : "Not set"}</b></div>
+            <div><span>Action</span><b>{item.recommendedAction ? titleCase(item.recommendedAction) : "Not set"}</b></div>
             <div><span>Side / offset</span><b>{titleCase(item.side)}{item.offsetM ? ` · ${item.offsetM} m` : ""}</b></div>
             <div><span>Recorded</span><b>{formatDateTime(item.observedAt)}</b></div>
             <div><span>Recorded by</span><b>{item.createdBy?.name ?? "Unknown"}</b></div>
@@ -439,13 +450,14 @@ export function ChainagePage() {
   const [projectId, setProjectId] = useState("");
   const [selectedAlignmentId, setSelectedAlignmentId] = useState("");
   const [alignmentForm, setAlignmentForm] = useState({ name: "", roadRef: "", direction: "", startLabel: "", endLabel: "", startChainage: "0+000", endChainage: "", geometryText: "", notes: "" });
-  const [observationForm, setObservationForm] = useState({ chainage: "", side: "CENTRE", offsetM: "", category: "ISSUE", title: "", description: "", latitude: "", longitude: "", gpsAccuracyM: "" });
+  const [observationForm, setObservationForm] = useState({ chainage: "", side: "CENTRE", offsetM: "", category: "ISSUE", assetType: "", severity: "", defectCause: "", recommendedAction: "", title: "", description: "", latitude: "", longitude: "", gpsAccuracyM: "" });
   const [snapHint, setSnapHint] = useState("");
   const [photos, setPhotos] = useState<FileAsset[]>([]);
   const [uploading, setUploading] = useState(false);
   const [viewMode, setViewMode] = useState<"map" | "list">("map");
   const [selectedObservationId, setSelectedObservationId] = useState<string | null>(null);
-  const [filters, setFilters] = useState({ status: "", category: "", side: "", search: "", chainageFrom: "", chainageTo: "" });
+  const [filters, setFilters] = useState({ status: "", category: "", assetType: "", severity: "", side: "", search: "", chainageFrom: "", chainageTo: "" });
+  const [mapFocusPoint, setMapFocusPoint] = useState<{ latitude: number; longitude: number; requestId: number } | null>(null);
 
   const alignmentsQuery = useApiQuery<ChainageAlignment[]>("/api/v1/chainage/alignments", { projectId: projectId || undefined });
   const observationQueryParams = useMemo(
@@ -454,6 +466,8 @@ export function ChainagePage() {
       alignmentId: selectedAlignmentId || undefined,
       status: filters.status || undefined,
       category: filters.category || undefined,
+      assetType: filters.assetType || undefined,
+      severity: filters.severity || undefined,
       side: filters.side || undefined,
       search: filters.search.trim() || undefined,
       chainageFromM: filters.chainageFrom ? parseChainage(filters.chainageFrom) : undefined,
@@ -510,6 +524,10 @@ export function ChainagePage() {
           longitude: observationForm.longitude ? Number(observationForm.longitude) : undefined,
           gpsAccuracyM: observationForm.gpsAccuracyM ? Number(observationForm.gpsAccuracyM) : undefined,
           category: observationForm.category,
+          assetType: observationForm.assetType || undefined,
+          severity: observationForm.severity || undefined,
+          defectCause: observationForm.defectCause || undefined,
+          recommendedAction: observationForm.recommendedAction || undefined,
           title: observationForm.title.trim(),
           description: observationForm.description.trim() || undefined,
           photoIds: photos.map((photo) => photo.id),
@@ -523,16 +541,29 @@ export function ChainagePage() {
     setUploading(true);
     try {
       const uploaded: FileAsset[] = [];
+      let gpsMatches = 0;
       for (const file of Array.from(files)) {
+        const gps = await extractImageGpsMetadata(file);
+        if (gps) gpsMatches += 1;
         const prepared = await prepareImageForUpload(file);
         const formData = new FormData();
         formData.set("file", prepared);
         formData.set("entityType", "ChainageObservation");
-        formData.set("metadata", JSON.stringify({ projectId, alignmentId: selectedAlignment?.id, chainage: observationForm.chainage, draft: true }));
+        formData.set("metadata", JSON.stringify({ projectId, alignmentId: selectedAlignment?.id, chainage: observationForm.chainage, draft: true, gps }));
         uploaded.push(await api<FileAsset>("/api/v1/files", { method: "POST", formData }));
+        if (gps && !observationForm.latitude && !observationForm.longitude) {
+          const nearest = nearestChainage(selectedAlignment, gps);
+          setObservationForm((form) => ({
+            ...form,
+            latitude: gps.latitude.toFixed(7),
+            longitude: gps.longitude.toFixed(7),
+            chainage: nearest ? formatChainage(nearest.chainageM) : form.chainage,
+          }));
+          setSnapHint(nearest ? `Photo GPS placed at ${formatChainage(nearest.chainageM)} (${Math.round(nearest.distanceM)} m from alignment)` : "Photo GPS captured. Add chainage manually or add road geometry to auto-calculate.");
+        }
       }
       setPhotos((current) => [...current, ...uploaded]);
-      toast.push(uploaded.length === 1 ? "Photo added" : `${uploaded.length} photos added`);
+      toast.push(`${uploaded.length === 1 ? "Photo added" : `${uploaded.length} photos added`}${gpsMatches ? `, ${gpsMatches} with GPS` : ""}`);
     } catch (error) {
       toast.push(error instanceof Error ? error.message : "Photo upload failed", "error");
     } finally {
@@ -547,12 +578,17 @@ export function ChainagePage() {
     }
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        const point = { latitude: position.coords.latitude, longitude: position.coords.longitude };
+        const nearest = nearestChainage(selectedAlignment, point);
         setObservationForm((form) => ({
           ...form,
-          latitude: position.coords.latitude.toFixed(7),
-          longitude: position.coords.longitude.toFixed(7),
+          latitude: point.latitude.toFixed(7),
+          longitude: point.longitude.toFixed(7),
           gpsAccuracyM: Math.round(position.coords.accuracy).toString(),
+          chainage: nearest ? formatChainage(nearest.chainageM) : form.chainage,
         }));
+        setMapFocusPoint({ ...point, requestId: Date.now() });
+        setSnapHint(nearest ? `Current GPS placed at ${formatChainage(nearest.chainageM)} (${Math.round(nearest.distanceM)} m from alignment)` : "Current GPS captured. Add chainage manually or add road geometry to auto-calculate.");
         toast.push("Current location captured");
       },
       () => toast.push("Could not capture current location", "error"),
@@ -635,6 +671,12 @@ export function ChainagePage() {
           <Field label="Category">
             <Select value={filters.category} onChange={(category) => setFilters((current) => ({ ...current, category }))} options={[...CHAINAGE_CATEGORIES]} allowEmpty emptyLabel="All categories" />
           </Field>
+          <Field label="Asset">
+            <Select value={filters.assetType} onChange={(assetType) => setFilters((current) => ({ ...current, assetType }))} options={[...CHAINAGE_ASSET_TYPES]} allowEmpty emptyLabel="All assets" />
+          </Field>
+          <Field label="Severity">
+            <Select value={filters.severity} onChange={(severity) => setFilters((current) => ({ ...current, severity }))} options={[...CHAINAGE_SEVERITIES]} allowEmpty emptyLabel="All severity" />
+          </Field>
           <Field label="Side">
             <Select value={filters.side} onChange={(side) => setFilters((current) => ({ ...current, side }))} options={[...CHAINAGE_SIDES]} allowEmpty emptyLabel="All sides" />
           </Field>
@@ -654,6 +696,7 @@ export function ChainagePage() {
             alignment={selectedAlignment}
             observations={observations}
             draft={observationForm.latitude && observationForm.longitude ? { latitude: Number(observationForm.latitude), longitude: Number(observationForm.longitude) } : null}
+            focusPoint={mapFocusPoint}
             onUseLocation={useCurrentLocation}
             onSelectObservation={setSelectedObservationId}
             onPick={(point) => {
@@ -748,6 +791,18 @@ export function ChainagePage() {
           <Field label="Category">
             <Select value={observationForm.category} onChange={(category) => setObservationForm((form) => ({ ...form, category }))} options={[...CHAINAGE_CATEGORIES]} />
           </Field>
+          <Field label="Asset type">
+            <Select value={observationForm.assetType} onChange={(assetType) => setObservationForm((form) => ({ ...form, assetType }))} options={[...CHAINAGE_ASSET_TYPES]} allowEmpty emptyLabel="Select asset" />
+          </Field>
+          <Field label="Severity">
+            <Select value={observationForm.severity} onChange={(severity) => setObservationForm((form) => ({ ...form, severity }))} options={[...CHAINAGE_SEVERITIES]} allowEmpty emptyLabel="Select severity" />
+          </Field>
+          <Field label="Cause">
+            <Select value={observationForm.defectCause} onChange={(defectCause) => setObservationForm((form) => ({ ...form, defectCause }))} options={[...CHAINAGE_DEFECT_CAUSES]} allowEmpty emptyLabel="Select cause" />
+          </Field>
+          <Field label="Action">
+            <Select value={observationForm.recommendedAction} onChange={(recommendedAction) => setObservationForm((form) => ({ ...form, recommendedAction }))} options={[...CHAINAGE_RECOMMENDED_ACTIONS]} allowEmpty emptyLabel="Select action" />
+          </Field>
           <Field label="Title" required>
             <TextInput value={observationForm.title} onChange={(title) => setObservationForm((form) => ({ ...form, title }))} placeholder="Headwall undermined" />
           </Field>
@@ -769,7 +824,7 @@ export function ChainagePage() {
           <button
             className="btn btn-accent"
             disabled={!projectId || !selectedAlignment || createObservation.running || Number.isNaN(parseChainage(observationForm.chainage)) || !observationForm.title.trim()}
-            onClick={() => createObservation.run({ onSuccess: () => { setObservationForm({ chainage: "", side: "CENTRE", offsetM: "", category: "ISSUE", title: "", description: "", latitude: "", longitude: "", gpsAccuracyM: "" }); setPhotos([]); toast.push("Chainage detail recorded"); } })}
+            onClick={() => createObservation.run({ onSuccess: () => { setObservationForm({ chainage: "", side: "CENTRE", offsetM: "", category: "ISSUE", assetType: "", severity: "", defectCause: "", recommendedAction: "", title: "", description: "", latitude: "", longitude: "", gpsAccuracyM: "" }); setPhotos([]); toast.push("Chainage detail recorded"); } })}
           >
             {createObservation.running ? "Recording..." : "Record detail"}
           </button>
